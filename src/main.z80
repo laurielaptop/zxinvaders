@@ -1,0 +1,25 @@
+; ZX Invaders bootstrap entry point
+; Build target: 48K Spectrum binary loaded at 32768 (0x8000)
+
+org 32768
+
+START:
+    di
+    ld sp, STACK_TOP
+
+    call Video_Init
+
+MAIN_LOOP:
+    call Input_ReadState
+    call Video_UpdateBorderFromInput
+    call Video_DrawTestSprite
+    call Timing_WaitFrame
+    jr MAIN_LOOP
+
+STACK_TOP: equ 65535
+
+include "platform/video.z80"
+include "platform/input.z80"
+include "platform/timing.z80"
+
+end START

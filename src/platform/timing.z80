@@ -1,0 +1,11 @@
+; Timing helper for predictable development frame pacing.
+
+Timing_WaitFrame:
+    ; Temporary busy-wait. Replaced later with IRQ-based cadence.
+    ld bc, 50000
+Timing_WaitFrame_Loop:
+    dec bc
+    ld a, b
+    or c
+    jr nz, Timing_WaitFrame_Loop
+    ret
