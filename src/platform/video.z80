@@ -1,7 +1,5 @@
 ; Video primitives for ZX Spectrum 48K
-
-SCREEN_PIXELS: equ 16384   ; 0x4000
-SCREEN_ATTRS:  equ 22528   ; 0x5800
+; Constants defined in constants.z80
 
 Video_Init:
     call Video_ClearBitmap
@@ -25,32 +23,3 @@ Video_ClearAttributes:
     ld (hl), 7
     ldir
     ret
-
-Video_UpdateBorderFromInput:
-    ; Input bit layout (A): bit0=left, bit1=right, bit2=fire
-    and 7
-    out (254), a
-    ret
-
-Video_DrawTestSprite:
-    ; Writes an 8-byte test block near top-left of bitmap.
-    ld hl, SCREEN_PIXELS + 32
-    ld de, TEST_SPRITE
-    ld b, 8
-Video_DrawTestSprite_vloop:
-    ld a, (de)
-    ld (hl), a
-    inc de
-    inc h
-    djnz Video_DrawTestSprite_vloop
-    ret
-
-TEST_SPRITE:
-    db 24
-    db 60
-    db 126
-    db 255
-    db 255
-    db 126
-    db 60
-    db 24

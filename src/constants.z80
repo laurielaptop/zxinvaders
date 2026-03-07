@@ -1,0 +1,41 @@
+; Global constants and memory layout for ZX Invaders port
+; Included by all modules
+
+; ===== Video Memory Layout =====
+SCREEN_PIXELS: equ 16384   ; 0x4000 - bitmap starts here
+SCREEN_ATTRS:  equ 22528   ; 0x5800 - color attributes start here
+GAME_RAM_BASE: equ 23808   ; 0x5CA0 - game state RAM after screen
+
+; ===== Game Object Structures =====
+OBJ_SIZE: equ 16           ; 16 bytes per game object
+
+; Player object offsets
+PLAYER_OBJ_OFFSET: equ 0
+PLAYER_X: equ 0
+PLAYER_Y: equ 1
+PLAYER_STATUS: equ 2       ; 0=normal, 0xFF=exploding
+PLAYER_FIRE_CTRL: equ 3    ; Fire button state
+PLAYER_PREV_X: equ 4       ; Previous X for sprite erase
+
+; Aliens grid
+ALIEN_ROWS: equ 5          ; 5 rows
+ALIEN_COLS: equ 11         ; 11 columns
+ALIEN_COUNT: equ 55        ; Total aliens
+ALIEN_GRID_BASE: equ GAME_RAM_BASE + 64
+
+; ===== Global Game State =====
+STATE_SCORE: equ GAME_RAM_BASE + 160
+STATE_LIVES: equ GAME_RAM_BASE + 163
+STATE_GAME_MODE: equ GAME_RAM_BASE + 164  ; 0=title, 1=playing, 2=game_over
+
+; ===== Player Sprite Parameters =====
+PLAYER_WIDTH: equ 8
+PLAYER_HEIGHT: equ 8
+PLAYER_MIN_X: equ 0
+PLAYER_MAX_X: equ 247      ; Keep one byte margin for shifted two-byte sprite draw
+PLAYER_Y_DEFAULT: equ 184  ; Near bottom of 192-pixel screen
+
+; ===== Projectile Management =====
+MAX_SHOTS: equ 1           ; Player can have 1 shot on screen
+SHOT_SPEED: equ 4          ; Pixels per frame
+SHOT_LIST_BASE: equ GAME_RAM_BASE + 200

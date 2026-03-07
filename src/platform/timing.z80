@@ -9,3 +9,12 @@ Timing_WaitFrame_Loop:
     or c
     jr nz, Timing_WaitFrame_Loop
     ret
+Timing_WaitShort:
+    ; Much shorter wait for testing (avoids long busy loops)
+    ld bc, 5000
+Timing_WaitShort_Loop:
+    dec bc
+    ld a, b
+    or c
+    jr nz, Timing_WaitShort_Loop
+    ret

@@ -1,0 +1,51 @@
+; Video rendering helper module for game logic
+; Constants are all included from main.z80
+
+; Calculate screen bitmap address from X,Y pixel coordinates
+; Input: A=X (0-255), C=Y (0-191)
+; Output: HL = screen bitmap address
+; ZX Spectrum screen layout is non-linear:
+; Address = 0x4000 + (Y[7:6] << 11) + (Y[2:0] << 8) + (Y[5:3] << 5) + (X >> 3)
+Video_CalcAddress:
+    push af
+    ld a, c                     ; A = Y
+    
+    ; Calculate high byte: 0x40 | (Y[7:6] << 3) | Y[2:0]
+    ld h, a
+    and 0x07                    ; Y[2:0]
+    or 0x40                     ; Set base 0x40
+    ld l, a                     ; L = 0x40 | Y[2:0]
+    
+    ld a, c                     ; A = Y again
+    and 0xC0                    ; Y[7:6]
+    rrca
+    rrca
+    rrca                        ; Shift right 3 times: Y[7:6] << 3 (in bits 5:4)
+    or l
+    ld h, a                     ; H = 0x40 | (Y[7:6] << 3) | Y[2:0]
+    
+    ; Calculate low byte: (Y[5:3] << 5) + (X >> 3)
+    ld a, c                     ; A = Y
+    and 0x38                    ; Y[5:3]
+    rlca
+    rlca                        ; Shift left 2: Y[5:3] << 5 (in bits 7:5)
+    ld l, a                     ; L = Y[5:3] << 5
+    
+    pop af                      ; Restore X
+    srl a
+    srl a
+    srl a                       ; X >> 3
+    or l                        ; Combine with Y bits
+    ld l, a                     ; HL now has correct address
+    
+    ret
+
+TEST_SPRITE:
+    db 24
+    db 60
+    db 126
+    db 255
+    db 255
+    db 126
+    db 60
+    db 24

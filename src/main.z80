@@ -3,23 +3,32 @@
 
 org 32768
 
+jp START
+
+include "constants.z80"
+include "platform/video.z80"
+include "platform/input.z80"
+include "platform/timing.z80"
+include "game/video_helpers.z80"
+include "game/player.z80"
+
 START:
     di
     ld sp, STACK_TOP
 
     call Video_Init
+    call Player_Init
 
 MAIN_LOOP:
-    call Input_ReadState
-    call Video_UpdateBorderFromInput
-    call Video_DrawTestSprite
-    call Timing_WaitFrame
+    ; Erase old sprite, then draw new one (avoids full-screen clear)
+    call Player_Erase
+    
+    call Player_Update
+    call Player_Draw
+    
+    call Timing_WaitShort
     jr MAIN_LOOP
 
 STACK_TOP: equ 65535
-
-include "platform/video.z80"
-include "platform/input.z80"
-include "platform/timing.z80"
 
 end START

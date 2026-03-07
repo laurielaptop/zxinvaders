@@ -1,0 +1,195 @@
+; Player ship module
+; Manages player position, movement, fire state, and rendering
+; Constants are all included from main.z80
+
+Player_Init:
+    ; Initialize player at default position
+    ld hl, GAME_RAM_BASE + PLAYER_OBJ_OFFSET
+    
+    ; X position (center of screen)
+    ld (hl), 128
+    inc hl
+    
+    ; Y position (near bottom)
+    ld (hl), PLAYER_Y_DEFAULT
+    inc hl
+    
+    ; Status (0 = normal)
+    ld (hl), 0
+    inc hl
+    
+    ; Fire state (0 = no fire)
+    ld (hl), 0
+    inc hl
+    
+    ; Previous X position (for erase) - initialize to current X
+    ld (hl), 128
+    
+    ret
+
+Player_Update:
+    ; Read input state from A (left, right, fire bits)
+    call Input_ReadState
+    
+    ; Extract control bits
+    ; bit 0: left, bit 1: right, bit 2: fire
+    ld b, a
+    
+    ; Save current X as previous X before updating
+    ld hl, GAME_RAM_BASE + PLAYER_X
+    ld a, (hl)
+    ld de, GAME_RAM_BASE + PLAYER_PREV_X
+    ld (de), a
+    
+    ; Update position based on left/right
+    ; Check left
+    bit 0, b
+    jr z, Player_CheckRight
+    sub 3                       ; Move left at 3 px/frame
+    cp 0
+    jr nc, Player_StoreX
+    xor a                        ; Clamp to 0
+    jr Player_StoreX
+    
+Player_CheckRight:
+    bit 1, b
+    jr z, Player_CheckFire
+    add a, 3                     ; Move right at 3 px/frame
+    cp PLAYER_MAX_X + 1
+    jr c, Player_StoreX
+    ld a, PLAYER_MAX_X
+    
+Player_StoreX:
+    ld (hl), a
+    
+Player_CheckFire:
+    bit 2, b
+    jr z, Player_ClearFire
+    
+    ; Set fire state
+    ld hl, GAME_RAM_BASE + PLAYER_FIRE_CTRL
+    ld (hl), 1
+    jr Player_UpdateDone
+    
+Player_ClearFire:
+    ld hl, GAME_RAM_BASE + PLAYER_FIRE_CTRL
+    ld (hl), 0
+    
+Player_UpdateDone:
+    ret
+
+Player_Erase:
+    ; Erase player sprite at previous XY position by drawing zeros
+    ld hl, GAME_RAM_BASE + PLAYER_PREV_X
+    ld a, (hl)                  ; A = previous X
+    ld b, a                     ; Preserve for bit offset
+    dec hl
+    dec hl                      ; HL now points to PLAYER_Y
+    ld c, (hl)                  ; C = Y (unchanged)
+    
+    ; Calculate screen address from previous XY
+    ld a, b
+    call Video_CalcAddress
+
+    ; Horizontal bit offset
+    ld a, b
+    and 0x07
+    ld c, a
+    
+    ; Erase 8x8 area with zeros
+    ld b, PLAYER_HEIGHT
+    
+Player_EraseLoop:
+    ld a, 0                     ; Erase with zeros
+    ld (hl), a
+    
+    ; If not byte-aligned, clear the adjacent byte too
+    ld a, c
+    or a
+    jr z, Player_EraseNextRow
+    inc l
+    ld a, 0
+    ld (hl), a
+    dec l
+    
+Player_EraseNextRow:
+    inc h
+    djnz Player_EraseLoop
+    ret
+
+Player_Draw:
+    ; Draw player sprite at current XY position
+    ld hl, GAME_RAM_BASE + PLAYER_OBJ_OFFSET
+    ld a, (hl)                  ; A = X
+    ld b, a                     ; Preserve X for bit offset
+    inc hl
+    ld c, (hl)                  ; C = Y
+    
+    ; Calculate screen address from XY
+    ld a, b
+    call Video_CalcAddress
+
+    ; Horizontal bit offset inside the target byte (0..7)
+    ld a, b
+    and 0x07
+    ld c, a
+    
+    ; Draw 8x8 player sprite
+    ld de, PLAYER_SPRITE_DATA
+    ld b, PLAYER_HEIGHT
+    
+Player_DrawLoop:
+    ld a, (de)                  ; Source row bits
+    inc de
+    push de                     ; Preserve sprite pointer (E is reused below)
+
+    ; If byte-aligned, write a single byte.
+    ld d, a
+    ld a, c
+    or a
+    jr z, Player_DrawAligned
+
+    ; Left byte: source >> offset
+    ld a, d
+    ld e, c
+Player_ShiftRightLoop:
+    srl a
+    dec e
+    jr nz, Player_ShiftRightLoop
+    ld (hl), a
+
+    ; Right byte: source << (8 - offset)
+    ld a, 8
+    sub c
+    ld e, a
+    ld a, d
+Player_ShiftLeftLoop:
+    sla a
+    dec e
+    jr nz, Player_ShiftLeftLoop
+    inc l
+    ld (hl), a
+    dec l
+    pop de
+    jr Player_DrawNextRow
+
+Player_DrawAligned:
+    ld a, d
+    ld (hl), a
+    pop de
+
+Player_DrawNextRow:
+    inc h
+    djnz Player_DrawLoop
+    
+    ret
+
+PLAYER_SPRITE_DATA:
+    db 0x3C    ; ·███··
+    db 0x7E    ; ·█████·
+    db 0xFF    ; ███████
+    db 0xFF    ; ███████
+    db 0xFF    ; ███████
+    db 0xFF    ; ███████
+    db 0x7E    ; ·█████·
+    db 0x3C    ; ·███··
