@@ -23,6 +23,37 @@ ALIEN_COLS: equ 11         ; 11 columns
 ALIEN_COUNT: equ 55        ; Total aliens
 ALIEN_GRID_BASE: equ GAME_RAM_BASE + 64
 
+; Alien movement state (stored in RAM)
+ALIEN_REF_X: equ GAME_RAM_BASE + 120      ; Reference alien X position
+ALIEN_REF_Y: equ GAME_RAM_BASE + 121      ; Reference alien Y position
+ALIEN_PREV_REF_X: equ GAME_RAM_BASE + 126 ; Previous reference X (for erase)
+ALIEN_PREV_REF_Y: equ GAME_RAM_BASE + 127 ; Previous reference Y (for erase)
+ALIEN_DELTA_X: equ GAME_RAM_BASE + 122    ; Horizontal delta: +2 or -2
+ALIEN_DELTA_Y: equ GAME_RAM_BASE + 123    ; Vertical delta: 0 or +8
+ALIEN_ANIM_FRAME: equ GAME_RAM_BASE + 124 ; Animation frame: 0 or 1
+ALIEN_MOVE_COUNTER: equ GAME_RAM_BASE + 125 ; Frame counter for movement timing
+
+; Alien initial starting position
+ALIEN_INIT_X: equ 40
+ALIEN_INIT_Y: equ 24
+ALIEN_SPACING_X: equ 16
+ALIEN_SPACING_Y: equ 12
+ALIEN_WIDTH: equ 8
+ALIEN_HEIGHT: equ 8
+
+; Movement constants
+ALIEN_MOVE_DELAY: equ 8    ; Frames between moves (slower = higher)
+ALIEN_STEP_DOWN: equ 8     ; Pixels to step down at edges
+ALIEN_EDGE_LEFT: equ 8     ; Left screen boundary
+ALIEN_EDGE_RIGHT: equ 72   ; Right boundary (256 - 176 formation width - 8 margin)
+
+; Debug overlay
+DEBUG_STATUS_BASE: equ SCREEN_PIXELS + 32
+
+; HUD layout
+HUD_SCORE_X: equ 8
+HUD_SCORE_Y: equ 0
+
 ; ===== Global Game State =====
 STATE_SCORE: equ GAME_RAM_BASE + 160
 STATE_LIVES: equ GAME_RAM_BASE + 163
@@ -38,4 +69,34 @@ PLAYER_Y_DEFAULT: equ 184  ; Near bottom of 192-pixel screen
 ; ===== Projectile Management =====
 MAX_SHOTS: equ 1           ; Player can have 1 shot on screen
 SHOT_SPEED: equ 4          ; Pixels per frame
+SHOT_WIDTH: equ 1          ; 1 pixel wide (single bit)
+SHOT_HEIGHT: equ 4         ; 4 pixels tall
 SHOT_LIST_BASE: equ GAME_RAM_BASE + 200
+
+; Shot object structure (4 bytes per shot)
+SHOT_X: equ 0              ; X position (pixel)
+SHOT_Y: equ 1              ; Y position (pixel)
+SHOT_PREV_Y: equ 2         ; Previous Y for erase
+SHOT_ACTIVE: equ 3         ; 0=inactive, 1=active
+SHOT_OBJ_SIZE: equ 4
+
+; Enemy shots
+MAX_ENEMY_SHOTS: equ 2
+ENEMY_SHOT_SPEED: equ 2    ; Pixels per frame (slower than player)
+ENEMY_SHOT_WIDTH: equ 1
+ENEMY_SHOT_HEIGHT: equ 4
+ENEMY_SHOT_LIST_BASE: equ GAME_RAM_BASE + 210
+
+; Enemy shot object structure (same as player shot)
+ENEMY_SHOT_X: equ 0
+ENEMY_SHOT_Y: equ 1
+ENEMY_SHOT_PREV_Y: equ 2
+ENEMY_SHOT_ACTIVE: equ 3
+ENEMY_SHOT_OBJ_SIZE: equ 4
+
+; Enemy shot timing
+ENEMY_SHOT_COUNTER: equ GAME_RAM_BASE + 128
+ENEMY_SHOT_FIRE_DELAY: equ 60  ; Frames between fire attempts
+
+; Enemy shot column-firing system
+ENEMY_SHOT_TABLE_PTR: equ GAME_RAM_BASE + 129  ; 2 bytes: pointer into firing table

@@ -1,0 +1,75 @@
+; Debug visualization helpers
+; Sets color attributes at top-right of screen for visual debugging
+
+; Debug indicator positions (top-right corner)
+DEBUG_FIRE_COUNTER: equ SCREEN_ATTRS + 28      ; Position 28 - shows counter progress
+DEBUG_FIRE_ATTEMPT: equ SCREEN_ATTRS + 29      ; Position 29 - flashes when attempting fire
+DEBUG_SHOT_CREATED: equ SCREEN_ATTRS + 30      ; Position 30 - set when shot created
+DEBUG_SHOT_ACTIVE:  equ SCREEN_ATTRS + 31      ; Position 31 (rightmost) - red when active
+
+; Colors: FLASH(7) | BRIGHT(6) | PAPER(5-3) | INK(2-0)
+; Use PAPER colors so full 8x8 attribute cells are always visible.
+DEBUG_COLOR_BLACK:  equ 0x00               ; PAPER black
+DEBUG_COLOR_BLUE:   equ 0x08               ; PAPER blue
+DEBUG_COLOR_RED:    equ 0x10               ; PAPER red
+DEBUG_COLOR_GREEN:  equ 0x20               ; PAPER green
+DEBUG_COLOR_YELLOW: equ 0x30               ; PAPER yellow
+
+Debug_Init:
+    ; Clear all debug indicators to black
+    ld hl, DEBUG_FIRE_COUNTER
+    ld (hl), DEBUG_COLOR_BLACK
+    inc hl
+    ld (hl), DEBUG_COLOR_BLACK
+    inc hl
+    ld (hl), DEBUG_COLOR_BLACK
+    inc hl
+    ld (hl), DEBUG_COLOR_BLACK
+    ret
+
+Debug_ShowFireCounter:
+    ; Show counter progress (cycles colors every few frames)
+    ; A = counter value
+    push af
+    and 0x07                     ; Take low 3 bits
+    jr nz, Debug_CounterColor
+    ld a, DEBUG_COLOR_BLACK
+    jr Debug_SetCounter
+Debug_CounterColor:
+    ld a, DEBUG_COLOR_BLUE
+Debug_SetCounter:
+    ld (DEBUG_FIRE_COUNTER), a
+    pop af
+    ret
+
+Debug_ShowFireAttempt:
+    ; Flash red indicator when fire is attempted
+    ld a, DEBUG_COLOR_RED
+    ld (DEBUG_FIRE_ATTEMPT), a
+    ret
+
+Debug_ShowShotCreated:
+    ; Set green indicator when shot is created
+    ld a, DEBUG_COLOR_GREEN
+    ld (DEBUG_SHOT_CREATED), a
+    ret
+
+Debug_UpdateShotActive:
+    ; Show yellow if any shot is active, black if none
+    ; Check both shot slots
+    ld hl, ENEMY_SHOT_LIST_BASE + ENEMY_SHOT_ACTIVE
+    ld a, (hl)
+    or a
+    jr nz, Debug_HasActive
+    ld hl, ENEMY_SHOT_LIST_BASE + ENEMY_SHOT_OBJ_SIZE + ENEMY_SHOT_ACTIVE
+    ld a, (hl)
+    or a
+    jr nz, Debug_HasActive
+    ; No active shots
+    ld a, DEBUG_COLOR_BLACK
+    ld (DEBUG_SHOT_ACTIVE), a
+    ret
+Debug_HasActive:
+    ld a, DEBUG_COLOR_YELLOW
+    ld (DEBUG_SHOT_ACTIVE), a
+    ret

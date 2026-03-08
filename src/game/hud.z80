@@ -1,0 +1,111 @@
+; HUD module
+; Draws score and initializes global game state values.
+
+GameState_Init:
+    ; Initialize gameplay state bytes
+    xor a
+    ld (STATE_SCORE), a
+    ld (STATE_SCORE + 1), a
+    ld (STATE_SCORE + 2), a
+    ld a, 3
+    ld (STATE_LIVES), a
+    ld a, 1
+    ld (STATE_GAME_MODE), a
+    ret
+
+HUD_Draw:
+    ; Draw score as three decimal digits (000-255)
+    ld a, (STATE_SCORE)
+    ld d, 0                      ; Hundreds
+HUD_HundredsLoop:
+    cp 100
+    jr c, HUD_HundredsDone
+    sub 100
+    inc d
+    jr HUD_HundredsLoop
+HUD_HundredsDone:
+
+    ld e, 0                      ; Tens
+HUD_TensLoop:
+    cp 10
+    jr c, HUD_TensDone
+    sub 10
+    inc e
+    jr HUD_TensLoop
+HUD_TensDone:
+    ld l, a                      ; Ones in L
+
+    ; Draw hundreds digit
+    ld a, d
+    ld b, HUD_SCORE_X
+    ld c, HUD_SCORE_Y
+    call HUD_DrawDigit
+
+    ; Draw tens digit
+    ld a, e
+    ld b, HUD_SCORE_X + 8
+    ld c, HUD_SCORE_Y
+    call HUD_DrawDigit
+
+    ; Draw ones digit
+    ld a, l
+    ld b, HUD_SCORE_X + 16
+    ld c, HUD_SCORE_Y
+    call HUD_DrawDigit
+
+    ret
+
+HUD_DrawDigit:
+    ; Input: A=digit 0..9, B=X (byte-aligned), C=Y
+    push bc
+    push de
+    push hl
+
+    ; Compute sprite pointer: HUD_DIGITS + digit*8
+    ld h, 0
+    ld l, a
+    add hl, hl                   ; x2
+    add hl, hl                   ; x4
+    add hl, hl                   ; x8
+    ld de, HUD_DIGITS
+    add hl, de
+
+    ; Get screen destination
+    ld a, b
+    call Video_CalcAddress
+    ex de, hl                    ; DE = screen ptr, HL = sprite ptr
+
+    ld b, 8
+HUD_DrawDigitLoop:
+    ld a, (hl)
+    ld (de), a
+    inc hl
+    inc d                        ; Next scan line
+    djnz HUD_DrawDigitLoop
+
+    pop hl
+    pop de
+    pop bc
+    ret
+
+HUD_DIGITS:
+    ; 0
+    db 0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00
+    ; 1
+    db 0x18,0x38,0x18,0x18,0x18,0x18,0x3C,0x00
+    ; 2
+    db 0x3C,0x66,0x06,0x0C,0x30,0x60,0x7E,0x00
+    ; 3
+    db 0x3C,0x66,0x06,0x1C,0x06,0x66,0x3C,0x00
+    ; 4
+    db 0x0C,0x1C,0x3C,0x6C,0x7E,0x0C,0x0C,0x00
+    ; 5
+    db 0x7E,0x60,0x7C,0x06,0x06,0x66,0x3C,0x00
+    ; 6
+    db 0x3C,0x66,0x60,0x7C,0x66,0x66,0x3C,0x00
+    ; 7
+    db 0x7E,0x66,0x06,0x0C,0x18,0x18,0x18,0x00
+    ; 8
+    db 0x3C,0x66,0x66,0x3C,0x66,0x66,0x3C,0x00
+    ; 9
+    db 0x3C,0x66,0x66,0x3E,0x06,0x66,0x3C,0x00

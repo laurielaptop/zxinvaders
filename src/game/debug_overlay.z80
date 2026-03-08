@@ -1,0 +1,27 @@
+; Debug status overlay helpers
+
+Debug_DrawStatus:
+    ; Draw raw bytes in top-left for quick state debugging
+    ld hl, DEBUG_STATUS_BASE
+
+    ; Shot X, Y, PREV_Y, ACTIVE
+    ld de, SHOT_LIST_BASE
+    ld a, (de)
+    ld (hl), a
+    inc hl
+    inc de
+
+    ld a, (de)
+    ld (hl), a
+    inc hl
+    inc de
+
+    ld a, (de)
+    ld (hl), a
+    inc hl
+    inc de
+
+    ld a, (de)
+    ld (hl), a
+
+    ret

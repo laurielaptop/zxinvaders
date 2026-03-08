@@ -31,4 +31,35 @@ Input_CheckFire:
 
 Input_Done:
     ld a, b
+    
+    ; DEBUG: Visual feedback via border color
+    ; bit 0 (left) = red, bit 1 (right) = green, bit 2 (fire) = cyan
+    push af
+    ld a, b
+    or a
+    jr z, Input_NoBorder        ; No keys = black border
+    
+    bit 2, b
+    jr z, Input_CheckLR
+    ld a, 5                     ; Fire = cyan
+    jr Input_SetBorder
+    
+Input_CheckLR:
+    bit 0, b
+    jr z, Input_CheckR
+    ld a, 2                     ; Left = red
+    jr Input_SetBorder
+    
+Input_CheckR:
+    bit 1, b
+    jr z, Input_NoBorder
+    ld a, 4                     ; Right = green
+    jr Input_SetBorder
+    
+Input_NoBorder:
+    xor a                       ; No keys = black
+    
+Input_SetBorder:
+    out (254), a
+    pop af
     ret

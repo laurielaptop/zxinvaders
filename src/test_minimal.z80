@@ -1,0 +1,22 @@
+; Minimal test: just write to screen and loop
+org 32768
+
+START:
+    ; Set border to cyan
+    ld a, 5
+    out (254), a
+    
+    ; Write pattern to screen
+    ld hl, 16384    ; SCREEN_PIXELS base
+    ld (hl), 0xFF
+    inc hl
+    ld (hl), 0xAA
+    inc hl
+    ld (hl), 0x55
+    inc hl
+    ld (hl), 0xFF
+    
+LOOP:
+    jr LOOP
+
+end START

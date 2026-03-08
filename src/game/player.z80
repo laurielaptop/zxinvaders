@@ -66,9 +66,15 @@ Player_CheckFire:
     bit 2, b
     jr z, Player_ClearFire
     
-    ; Set fire state
+    ; Fire button pressed - check if we should spawn a shot
     ld hl, GAME_RAM_BASE + PLAYER_FIRE_CTRL
-    ld (hl), 1
+    ld a, (hl)
+    or a
+    jr nz, Player_UpdateDone  ; Don't spawn if fire was already held
+    
+    ; Fire button newly pressed - spawn shot
+    ld (hl), 1                ; Set fire state
+    call Shot_Spawn
     jr Player_UpdateDone
     
 Player_ClearFire:
@@ -83,6 +89,7 @@ Player_Erase:
     ld hl, GAME_RAM_BASE + PLAYER_PREV_X
     ld a, (hl)                  ; A = previous X
     ld b, a                     ; Preserve for bit offset
+    dec hl
     dec hl
     dec hl                      ; HL now points to PLAYER_Y
     ld c, (hl)                  ; C = Y (unchanged)
@@ -193,3 +200,13 @@ PLAYER_SPRITE_DATA:
     db 0xFF    ; ███████
     db 0x7E    ; ·█████·
     db 0x3C    ; ·███··
+
+Player_GetPosition:
+    ; Return player position in B (X) and C (Y)
+    ld hl, GAME_RAM_BASE + PLAYER_X
+    ld a, (hl)
+    ld b, a                      ; X
+    inc hl                       ; Point to PLAYER_Y
+    ld a, (hl)
+    ld c, a                      ; Y
+    ret

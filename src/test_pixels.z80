@@ -1,0 +1,88 @@
+; Pixel drawing test - verify we can draw individual pixels
+org 32768
+
+START:
+    di
+    ld sp, 65535
+    
+    ; Clear screen
+    ld hl, 16384
+    ld de, 16385
+    ld bc, 6143
+    ld (hl), 0
+    ldir
+    
+    ; Test 1: Draw a vertical line at X=128, Y=96 (screen center)
+    ld a, 128               ; X position
+    ld c, 96                ; Y position
+    call CalcAddress
+    
+    ; Draw 8 pixels vertically
+    ld b, 8
+    ld d, 0x01              ; Bit mask for pixel at bit position 0
+DrawLoop1:
+    ld a, (hl)
+    or d
+    ld (hl), a
+    inc h                   ; Next scan line
+    djnz DrawLoop1
+    
+    ; Test 2: Draw a vertical line at X=135, Y=96
+    ld a, 135
+    ld c, 96
+    call CalcAddress
+    
+    ld b, 8
+    ld d, 0x80              ; Bit mask for leftmost pixel
+DrawLoop2:
+    ld a, (hl)
+    or d
+    ld (hl), a
+    inc h
+    djnz DrawLoop2
+    
+    ; Test 3: Draw 8 horizontal pixels starting at X=100, Y=50
+    ld a, 100
+    ld c, 50
+    call CalcAddress
+    
+    ld b, 8
+PixelLoop:
+    ld a, 0xFF              ; All 8 pixels in byte
+    ld (hl), a
+    inc l                   ; Next byte to the right
+    djnz PixelLoop
+    
+Hang:
+    jr Hang
+
+CalcAddress:
+    ; Input: A=X, C=Y
+    ; Output: HL=screen address
+    push af
+    ld a, c
+    ld h, a
+    and 0x07
+    or 0x40
+    ld l, a
+    ld a, c
+    and 0xC0
+    rrca
+    rrca
+    rrca
+    or l
+    ld h, a
+    ld a, c
+    and 0x38
+    rlca
+    rlca
+    ld l, a
+    pop af
+    srl a
+    srl a
+    srl a
+    or l
+    ld l, a
+    ret
+
+end START

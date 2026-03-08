@@ -1,0 +1,227 @@
+; Shot/projectile module
+; Manages player shot spawning, movement, and rendering
+
+Shot_Init:
+    ; Initialize all shots to inactive
+    ld hl, SHOT_LIST_BASE
+    ld b, MAX_SHOTS
+Shot_InitLoop:
+    ld (hl), 0              ; X = 0
+    inc hl
+    ld (hl), 0              ; Y = 0
+    inc hl
+    ld (hl), 0              ; PREV_Y = 0
+    inc hl
+    ld (hl), 0              ; ACTIVE = 0 (inactive)
+    inc hl
+    djnz Shot_InitLoop
+    ret
+
+Shot_Spawn:
+    ; Spawn a new shot from player position if slot available
+    ; Input: none (reads player position directly)
+    ; Returns: nothing
+    
+    ; DEBUG: Flash border white when spawn is called
+    push af
+    ld a, 7
+    out (254), a
+    pop af
+    
+    ; Check if shot slot is available
+    ld hl, SHOT_LIST_BASE + SHOT_ACTIVE
+    ld a, (hl)
+    or a
+    ret nz                  ; Return if shot already active
+    
+    ; Get player position
+    ld hl, GAME_RAM_BASE + PLAYER_X
+    ld a, (hl)              ; A = player X
+    inc hl
+    ld c, (hl)              ; C = player Y
+    
+    ; Spawn shot at center of player
+    add a, 4                ; Center: player X + 4 pixels
+    ld hl, SHOT_LIST_BASE
+    ld (hl), a              ; Set shot X
+    inc hl
+    
+    ; Start shot above player
+    ld a, c
+    sub 8                   ; Start 8 pixels above player
+    ld (hl), a              ; Set shot Y
+    inc hl
+    ld (hl), a              ; Set PREV_Y same as Y initially
+    inc hl
+    ld (hl), 1              ; Set ACTIVE = 1
+    ret
+
+Shot_Update:
+    ; Update all active shots (move upward)
+    ld hl, SHOT_LIST_BASE
+    ld b, MAX_SHOTS
+Shot_UpdateLoop:
+    push bc
+    push hl
+    
+    ; Check if shot active
+    ld bc, SHOT_ACTIVE
+    add hl, bc
+    ld a, (hl)
+    or a
+    jr z, Shot_UpdateNext   ; Skip if inactive
+    
+    ; Move shot upward
+    pop hl
+    push hl
+    inc hl                  ; Point to Y
+    ld a, (hl)
+    sub SHOT_SPEED          ; Move up by SHOT_SPEED pixels
+
+    ; If subtraction underflowed, shot moved above Y=0 -> deactivate
+    jr c, Shot_UpdateDeactivate
+    
+    ; Update Y position
+    ld (hl), a
+    jr Shot_UpdateNext
+    
+Shot_UpdateDeactivate:
+    ; Deactivate shot that went off screen
+    pop hl
+    push hl
+    ld bc, SHOT_ACTIVE
+    add hl, bc
+    ld (hl), 0              ; Set ACTIVE = 0
+    
+Shot_UpdateNext:
+    pop hl
+    pop bc
+    ld de, SHOT_OBJ_SIZE
+    add hl, de              ; Move to next shot
+    djnz Shot_UpdateLoop
+    ret
+
+Shot_Erase:
+    ; Erase all active shots at their previous positions
+    ld hl, SHOT_LIST_BASE
+    ld b, MAX_SHOTS
+Shot_EraseLoop:
+    push bc
+    push hl
+    
+    ; Check if shot active
+    ld bc, SHOT_ACTIVE
+    add hl, bc
+    ld a, (hl)
+    or a
+    jr z, Shot_EraseNext    ; Skip if inactive
+    
+    ; Get previous position
+    pop hl
+    push hl
+    ld a, (hl)              ; A = X
+    ld b, a                 ; B = X (save for mask calculation)
+    inc hl
+    inc hl                  ; Skip Y, point to PREV_Y
+    ld c, (hl)              ; C = PREV_Y
+    
+    ; Calculate screen address
+    call Video_CalcAddress
+    
+    ; Build clear mask for this X bit (invert of draw mask)
+    ld a, b
+    and 0x07                ; Bit position within byte (0-7)
+    ld e, a
+    ld a, 0x80
+    inc e                   ; If position is 0, perform 0 shifts
+Shot_EraseShiftLoop:
+    dec e
+    jr z, Shot_EraseMaskReady
+    srl a
+    jr Shot_EraseShiftLoop
+Shot_EraseMaskReady:
+    cpl                     ; Invert so target bit becomes 0, others stay 1
+    ld d, a
+
+    ; Erase 4-pixel vertical line (only clear the shot bit)
+    ld b, SHOT_HEIGHT
+Shot_ErasePixelLoop:
+    ld a, (hl)
+    and d
+    ld (hl), a
+    inc h                   ; Move to next scan line
+    djnz Shot_ErasePixelLoop
+    
+Shot_EraseNext:
+    pop hl
+    pop bc
+    ld de, SHOT_OBJ_SIZE
+    add hl, de
+    djnz Shot_EraseLoop
+    ret
+
+Shot_Draw:
+    ; Draw all active shots at their current positions
+    ld hl, SHOT_LIST_BASE
+    ld b, MAX_SHOTS
+Shot_DrawLoop:
+    push bc
+    push hl
+    
+    ; Check if shot active
+    ld bc, SHOT_ACTIVE
+    add hl, bc
+    ld a, (hl)
+    or a
+    jr z, Shot_DrawNext     ; Skip if inactive
+    
+    ; Get current position
+    pop hl
+    push hl
+    ld a, (hl)              ; A = X
+    ld b, a                 ; B = X (save for address + mask)
+    inc hl
+    ld c, (hl)              ; C = Y
+    
+    ; Build bit mask for this X bit
+    ld a, b
+    and 0x07                ; Bit position within byte (0-7)
+    ld e, a
+    ld a, 0x80              ; Start with leftmost bit (10000000)
+    inc e                   ; If position is 0, perform 0 shifts
+Shot_ShiftLoop:
+    dec e
+    jr z, Shot_DrawMaskReady
+    srl a
+    jr Shot_ShiftLoop
+Shot_DrawMaskReady:
+    ld d, a                 ; D = draw mask
+
+    ; Calculate screen address (HL)
+    ld a, b
+    call Video_CalcAddress
+
+Shot_DrawPixels:
+    ld b, SHOT_HEIGHT
+Shot_DrawPixelLoop:
+    ld a, (hl)              ; Read current byte
+    or d                    ; Set the shot pixel
+    ld (hl), a              ; Write back
+    inc h                   ; Move to next scan line
+    djnz Shot_DrawPixelLoop
+
+    ; Record last rendered Y for next frame erase
+    pop hl
+    push hl
+    inc hl                  ; Point to Y
+    ld a, (hl)
+    inc hl                  ; Point to PREV_Y
+    ld (hl), a
+    
+Shot_DrawNext:
+    pop hl
+    pop bc
+    ld de, SHOT_OBJ_SIZE
+    add hl, de
+    djnz Shot_DrawLoop
+    ret

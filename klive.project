@@ -1,0 +1,62 @@
+{
+  "kliveVersion": "0.51.1",
+  "machineType": "sp48",
+  "modelId": "pal",
+  "config": {
+    "screenFreq": "pal"
+  },
+  "clockMultiplier": 1,
+  "soundLevel": 0,
+  "soundMuted": true,
+  "savedSoundLevel": 0.8,
+  "media": {
+    "tape": "/Volumes/4TB Data/Projects/zxinvaders/dist/zxinvaders.tap"
+  },
+  "machineSpecific": {},
+  "ide": {
+    "excludedProjectItems": []
+  },
+  "viewOptions": {
+    "theme": "dark"
+  },
+  "debugger": {
+    "breakpoints": []
+  },
+  "builder": {
+    "roots": []
+  },
+  "workspaceSettings": {
+    "docsWorkspace": {
+      "documents": [
+        {
+          "type": "TapViewer",
+          "id": "/Volumes/4TB Data/Projects/zxinvaders/dist/test_border.tap",
+          "position": {
+            "line": 0,
+            "column": 0
+          }
+        },
+        {
+          "type": "TapViewer",
+          "id": "/Volumes/4TB Data/Projects/zxinvaders/dist/zxinvaders.tap",
+          "position": {
+            "line": 0,
+            "column": 0
+          }
+        }
+      ],
+      "activeDocumentId": "/Volumes/4TB Data/Projects/zxinvaders/dist/zxinvaders.tap"
+    },
+    "Disassembly": {
+      "topAddress": 1525,
+      "isFullView": true,
+      "currentSegment": 0,
+      "decimalView": false,
+      "bankLabel": true,
+      "autoRefresh": true,
+      "ram": true,
+      "screen": false,
+      "disassOffset": 0
+    }
+  }
+}

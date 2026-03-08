@@ -1,0 +1,457 @@
+; Enemy shot module
+; Aliens fire downward at player
+
+EnemyShot_Init:
+    ; Clear all enemy shot slots
+    ld hl, ENEMY_SHOT_LIST_BASE
+    ld b, MAX_ENEMY_SHOTS
+EnemyShot_InitLoop:
+    xor a
+    ld (hl), a                   ; X = 0
+    inc hl
+    ld (hl), a                   ; Y = 0
+    inc hl
+    ld (hl), a                   ; PREV_Y = 0
+    inc hl
+    ld (hl), a                   ; ACTIVE = 0
+    inc hl
+    djnz EnemyShot_InitLoop
+    
+    ; Initialize fire counter
+    xor a
+    ld (ENEMY_SHOT_COUNTER), a
+    
+    ; Initialize column-firing table pointer
+    ld hl, EnemyShot_ColumnTable
+    ld (ENEMY_SHOT_TABLE_PTR), hl
+    ret
+
+EnemyShot_TryFire:
+    ; Periodically try to spawn enemy shot from random alien
+    
+    ; Check fire counter
+    ld hl, ENEMY_SHOT_COUNTER
+    inc (hl)
+    ld a, (hl)
+    call Debug_ShowFireCounter   ; DEBUG: Show counter is incrementing
+    cp ENEMY_SHOT_FIRE_DELAY
+    ret c                        ; Not time yet
+    ld (hl), 0                   ; Reset counter
+    
+    call Debug_ShowFireAttempt   ; DEBUG: Show we're trying to fire
+    
+    ; Find an available shot slot
+    ld hl, ENEMY_SHOT_LIST_BASE
+    ld b, MAX_ENEMY_SHOTS
+EnemyShot_FindSlot:
+    push hl
+    push bc
+    ld bc, ENEMY_SHOT_ACTIVE
+    add hl, bc
+    ld a, (hl)
+    pop bc
+    pop hl
+    or a
+    jr z, EnemyShot_FoundSlot   ; Found inactive slot
+    ld de, ENEMY_SHOT_OBJ_SIZE
+    add hl, de
+    djnz EnemyShot_FindSlot
+    ret                          ; No slots available
+    
+EnemyShot_FoundSlot:
+    ; HL points to available slot
+    push hl                      ; Save slot pointer
+    
+    ; Pick a random alive alien
+    call EnemyShot_PickAlien
+    or a                         ; Check if alien found
+    pop hl
+    ret z                        ; No aliens alive
+
+    ; If the spawn Y is too low to fit the full sprite, skip this fire attempt.
+    ld a, d
+    cp 192 - ENEMY_SHOT_HEIGHT + 1
+    ret nc
+    
+    ; BC = alien X, DE = alien Y
+    ; Store shot position
+    ld (hl), b                   ; X
+    inc hl
+    ld (hl), d                   ; Y
+    inc hl
+    ld (hl), d                   ; PREV_Y = Y
+    inc hl
+    ld (hl), 1                   ; ACTIVE = 1
+    
+    call Debug_ShowShotCreated   ; DEBUG: Show shot was created
+    ret
+
+EnemyShot_PickAlien:
+    ; Use column-firing table to pick a column, then find lowest alive alien in that column.
+    ; Returns: B = X, D = Y, A = 1 on success. A = 0 if none found.
+
+    ; Get next column from table (stored as 1..11), convert to 0..10 in C.
+    ld hl, (ENEMY_SHOT_TABLE_PTR)
+    ld a, (hl)
+    dec a
+    ld c, a
+
+    ; Advance table pointer with wraparound.
+    inc hl
+    ld a, l
+    cp LOW EnemyShot_ColumnTableEnd
+    jr nz, EnemyShot_TablePtrOK
+    ld a, h
+    cp HIGH EnemyShot_ColumnTableEnd
+    jr nz, EnemyShot_TablePtrOK
+    ld hl, EnemyShot_ColumnTable
+EnemyShot_TablePtrOK:
+    ld (ENEMY_SHOT_TABLE_PTR), hl
+
+    ; HL = pointer to bottom row, selected column.
+    ld hl, ALIEN_GRID_BASE + ((ALIEN_ROWS - 1) * ALIEN_COLS)
+    ld e, c
+    ld d, 0
+    add hl, de
+    ld d, ALIEN_ROWS - 1         ; D = current row index (4..0)
+    ld e, ALIEN_ROWS             ; E = rows remaining to test
+
+EnemyShot_FindInColumnLoop:
+    ld a, (hl)
+    or a
+    jr nz, EnemyShot_FoundInColumn
+
+    ; Move up one row in same column: index -= ALIEN_COLS
+    ld a, l
+    sub ALIEN_COLS
+    ld l, a
+    ld a, h
+    sbc a, 0
+    ld h, a
+
+    dec d
+    dec e
+    jr nz, EnemyShot_FindInColumnLoop
+
+    ; No alive alien in selected column.
+    xor a
+    ret
+
+EnemyShot_FoundInColumn:
+    ; Calculate X = ALIEN_REF_X + col * spacing + centered offset.
+    ld a, (ALIEN_REF_X)
+    ld b, a
+    ld a, c
+    or a
+    jr z, EnemyShot_XDone
+    ld e, a
+EnemyShot_XLoop:
+    ld a, b
+    add a, ALIEN_SPACING_X
+    ld b, a
+    dec e
+    jr nz, EnemyShot_XLoop
+EnemyShot_XDone:
+    ld a, b
+    add a, 4
+    ld b, a
+
+    ; Calculate Y = ALIEN_REF_Y + row * spacing + below-alien offset.
+    ld a, (ALIEN_REF_Y)
+    ld e, d
+    inc e                        ; Convert row index (0..4) to loop count
+    dec e
+    jr z, EnemyShot_YDone
+EnemyShot_YLoop:
+    add a, ALIEN_SPACING_Y
+    dec e
+    jr nz, EnemyShot_YLoop
+EnemyShot_YDone:
+    add a, 8
+    ld d, a
+
+    ld a, 1
+    ret
+
+EnemyShot_Update:
+    ; Move all active enemy shots downward
+    ld hl, ENEMY_SHOT_LIST_BASE
+    ld b, MAX_ENEMY_SHOTS
+    
+EnemyShot_UpdateLoop:
+    push hl
+    push bc
+    
+    ; Check if active
+    ld bc, ENEMY_SHOT_ACTIVE
+    add hl, bc
+    ld a, (hl)
+    pop bc
+    pop hl
+    or a
+    jr z, EnemyShot_UpdateNext   ; Inactive
+    
+    ; Move shot downward
+    push hl
+    inc hl                        ; Point to Y
+    ld a, (hl)
+    add a, ENEMY_SHOT_SPEED
+    ld (hl), a
+    
+    ; Check if shot top has moved past last safe draw position.
+    ; For 4px tall sprite on 0..191 screen, max safe top Y is 188.
+    cp 192 - ENEMY_SHOT_HEIGHT + 1
+    jr c, EnemyShot_UpdateOK
+    
+    ; Deactivate and clear PREV_Y marker
+    pop hl
+    push hl
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de
+    xor a
+    ld (hl), a
+    dec hl
+    ld (hl), a
+    
+EnemyShot_UpdateOK:
+    pop hl
+    
+EnemyShot_UpdateNext:
+    ld de, ENEMY_SHOT_OBJ_SIZE
+    add hl, de
+    djnz EnemyShot_UpdateLoop
+    ret
+
+EnemyShot_CheckPlayerCollision:
+    ; Check if any enemy shot hit the player
+    ld hl, ENEMY_SHOT_LIST_BASE
+    ld b, MAX_ENEMY_SHOTS
+    
+EnemyShot_CheckLoop:
+    push hl
+    push bc
+    
+    ; Check if active
+    ld bc, ENEMY_SHOT_ACTIVE
+    add hl, bc
+    ld a, (hl)
+    pop bc
+    pop hl
+    or a
+    jr z, EnemyShot_CheckNext    ; Inactive
+    
+    ; Get shot X, Y
+    push hl
+    ld a, (hl)                   ; Shot X
+    ld d, a
+    inc hl
+    ld a, (hl)                   ; Shot Y
+    ld e, a
+    pop hl
+    
+    ; Get player position
+    push hl
+    push bc
+    push de
+    call Player_GetPosition      ; Returns X in B, Y in C
+    pop de
+    
+    ; Check if shot overlaps player (8x8 sprite)
+    ; Shot is at (D, E)
+    ; Player is at (B, C)
+    
+    ; Check X overlap: D >= B and D < B+8
+    ld a, d
+    cp b
+    jr c, EnemyShot_NoHit        ; Shot X < Player X
+    ld a, b
+    add a, 8
+    cp d
+    jr c, EnemyShot_NoHit        ; Shot X >= Player X + 8
+    
+    ; Check Y overlap: E >= C and E < C+8
+    ld a, e
+    cp c
+    jr c, EnemyShot_NoHit        ; Shot Y < Player Y
+    ld a, c
+    add a, 8
+    cp e
+    jr c, EnemyShot_NoHit        ; Shot Y >= Player Y + 8
+    
+    ; Hit detected!
+    pop bc
+    pop hl
+    
+    ; Deactivate shot and clear PREV_Y marker
+    push hl
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de
+    xor a
+    ld (hl), a
+    dec hl
+    ld (hl), a
+    pop hl
+    
+    ; Decrement player lives
+    ld hl, STATE_LIVES
+    dec (hl)
+    
+    ; TODO: Add player explosion/respawn
+    
+    jr EnemyShot_CheckNext
+    
+EnemyShot_NoHit:
+    pop bc
+    pop hl
+    
+EnemyShot_CheckNext:
+    ld de, ENEMY_SHOT_OBJ_SIZE
+    add hl, de
+    djnz EnemyShot_CheckLoop
+    ret
+
+EnemyShot_Erase:
+    ; Erase all enemy shots at previous position
+    ld hl, ENEMY_SHOT_LIST_BASE
+    ld b, MAX_ENEMY_SHOTS
+    
+EnemyShot_EraseLoop:
+    push bc
+    push hl
+    
+    ; Check if active
+    ld bc, ENEMY_SHOT_ACTIVE
+    add hl, bc
+    ld a, (hl)
+    or a
+    jr z, EnemyShot_EraseNext
+    
+    ; Get X and PREV_Y
+    pop hl
+    push hl
+    ld a, (hl)                   ; A = X
+    ld b, a                      ; B = X
+    inc hl
+    inc hl
+    ld c, (hl)                   ; C = PREV_Y
+
+    ; Build erase mask once for this X bit
+    ld a, b
+    and 0x07
+    ld e, a
+    ld a, 0x80
+    inc e
+EnemyShot_EraseShiftLoop:
+    dec e
+    jr z, EnemyShot_EraseMaskReady
+    srl a
+    jr EnemyShot_EraseShiftLoop
+EnemyShot_EraseMaskReady:
+    cpl
+    ld d, a                      ; D = erase mask
+
+    ; Erase 4-pixel vertical line with per-row clipping
+    ld e, ENEMY_SHOT_HEIGHT
+EnemyShot_ErasePixelLoop:
+    ld a, c
+    cp 192
+    jr nc, EnemyShot_EraseDone
+    ld a, b
+    call Video_CalcAddress
+    ld a, (hl)
+    and d
+    ld (hl), a
+    inc c
+    dec e
+    jr nz, EnemyShot_ErasePixelLoop
+EnemyShot_EraseDone:
+    
+EnemyShot_EraseNext:
+    pop hl
+    pop bc
+    ld de, ENEMY_SHOT_OBJ_SIZE
+    add hl, de
+    djnz EnemyShot_EraseLoop
+    ret
+
+EnemyShot_Draw:
+    ; Draw all active enemy shots, update PREV_Y
+    ld hl, ENEMY_SHOT_LIST_BASE
+    ld b, MAX_ENEMY_SHOTS
+    
+EnemyShot_DrawLoop:
+    push bc
+    push hl
+    
+    ; Check if active
+    ld bc, ENEMY_SHOT_ACTIVE
+    add hl, bc
+    ld a, (hl)
+    or a
+    jr z, EnemyShot_DrawNext
+    
+    ; Get X and Y
+    pop hl
+    push hl
+    push ix                      ; Save IX
+    push hl
+    pop ix                       ; IX = shot structure base
+    ld a, (hl)                   ; A = X
+    ld b, a                      ; B = X
+    inc hl
+    ld c, (hl)                   ; C = Y
+
+    ; Build draw mask once for this X bit
+    ld a, b
+    and 0x07
+    ld e, a
+    ld a, 0x80
+    inc e
+EnemyShot_DrawShiftLoop:
+    dec e
+    jr z, EnemyShot_DrawMaskReady
+    srl a
+    jr EnemyShot_DrawShiftLoop
+EnemyShot_DrawMaskReady:
+    ld d, a                      ; D = draw mask
+
+    ; Draw 4-pixel vertical line with per-row clipping
+    ld e, ENEMY_SHOT_HEIGHT
+EnemyShot_DrawPixelLoop:
+    ld a, c
+    cp 192
+    jr nc, EnemyShot_DrawDone
+    ld a, b
+    call Video_CalcAddress
+    ld a, (hl)
+    or d
+    ld (hl), a
+    inc c
+    dec e
+    jr nz, EnemyShot_DrawPixelLoop
+EnemyShot_DrawDone:
+    
+    ; Update PREV_Y using saved structure pointer
+    push ix
+    pop hl                       ; HL = shot structure base
+    inc hl                       ; Point to Y
+    ld a, (hl)                   ; Get current Y
+    inc hl                       ; Point to PREV_Y
+    ld (hl), a                   ; Store current Y in PREV_Y
+    pop ix                       ; Restore IX
+    
+EnemyShot_DrawNext:
+    pop hl
+    pop bc
+    ld de, ENEMY_SHOT_OBJ_SIZE
+    add hl, de
+    djnz EnemyShot_DrawLoop
+    ret
+
+; ===== Column-Firing Table =====
+; Sequence of columns (0-10) to fire from, cycles through different positions.
+; Based on original arcade plunger shot table pattern.
+EnemyShot_ColumnTable:
+    defb 1, 7, 1, 1, 1, 4, 11, 1, 6, 3
+    defb 1, 1, 11, 9, 2, 8
+EnemyShot_ColumnTableEnd:

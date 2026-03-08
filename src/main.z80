@@ -11,20 +11,48 @@ include "platform/input.z80"
 include "platform/timing.z80"
 include "game/video_helpers.z80"
 include "game/player.z80"
+include "game/shot.z80"
+include "game/enemy_shot.z80"
+include "game/aliens.z80"
+include "game/debug_overlay.z80"
+include "game/hud.z80"
+include "debug.z80"
 
 START:
     di
     ld sp, STACK_TOP
 
     call Video_Init
+    call GameState_Init
     call Player_Init
+    call Shot_Init
+    call EnemyShot_Init
+    call Aliens_Init
+    call Debug_Init
 
 MAIN_LOOP:
-    ; Erase old sprite, then draw new one (avoids full-screen clear)
+    ; Erase old sprites
     call Player_Erase
+    call Shot_Erase
+    call EnemyShot_Erase
+    call Aliens_Erase
     
+    ; Update game state
     call Player_Update
+    call Shot_Update
+    call EnemyShot_Update
+    call Debug_UpdateShotActive
+    call Aliens_CheckShotCollision
+    call EnemyShot_CheckPlayerCollision
+    call Aliens_Move
+    call EnemyShot_TryFire
+    
+    ; Draw new sprites
+    call Aliens_Draw
     call Player_Draw
+    call Shot_Draw
+    call EnemyShot_Draw
+    call HUD_Draw
     
     call Timing_WaitShort
     jr MAIN_LOOP

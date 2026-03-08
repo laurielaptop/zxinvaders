@@ -1,0 +1,12 @@
+; Minimal test: set border red and return to BASIC
+
+org 32768
+
+START:
+    ld a, 2         ; Red color (bits 0-2 = color, bit 3 = brightness)
+    out (254), a    ; OUT to ULA port sets border
+
+    ; Return to BASIC caller (use with RANDOMIZE USR 32768)
+    ret
+    
+end START

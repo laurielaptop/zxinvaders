@@ -4,20 +4,29 @@ ZESARUX ?= /Applications/ZEsarUX.app/Contents/MacOS/zesarux
 BIN2TAP ?= bin2tap
 
 SRC := src/main.z80
+PLATFORM_SRCS := $(wildcard src/platform/*.z80)
+GAME_SRCS := $(wildcard src/game/*.z80)
 BUILD_DIR := build
 DIST_DIR := dist
 
 BIN := $(BUILD_DIR)/zxinvaders.bin
 TAP := $(DIST_DIR)/zxinvaders.tap
 
+TEST_PIXELS_BIN := $(BUILD_DIR)/test_pixels.bin
+TEST_PIXELS_TAP := $(DIST_DIR)/test_pixels.tap
+
+DIAG_BIN := $(BUILD_DIR)/zxinvaders_diag.bin
+DIAG_TAP := $(DIST_DIR)/zxinvaders_diag.tap
+
 .PHONY: all assemble package-tap run run-klive run-zesarux clean check check-tools bootstrap dirs
+.PHONY: test-pixels run-test-pixels diag-pixels run-diag-pixels
 
 all: assemble
 
 assemble: dirs check-assembler $(BIN)
 	@echo "Built $(BIN)"
 
-$(BIN): $(SRC) src/platform/video.z80 src/platform/input.z80 src/platform/timing.z80
+$(BIN): $(SRC) src/constants.z80 $(PLATFORM_SRCS) $(GAME_SRCS)
 	$(ASM) -I src -o $(BIN) $(SRC)
 
 package-tap: assemble
@@ -32,6 +41,28 @@ run-klive: package-tap
 
 run-zesarux: package-tap
 	@./tools/run_fuse.sh --zesarux $(TAP)
+
+test-pixels: dirs check-assembler $(TEST_PIXELS_BIN)
+	@mkdir -p $(DIST_DIR)
+	@./tools/bin_to_tap.sh $(TEST_PIXELS_BIN) $(TEST_PIXELS_TAP) 32768 PIXTEST 32768
+	@echo "Built $(TEST_PIXELS_TAP)"
+
+$(TEST_PIXELS_BIN): src/test_pixels.z80
+	$(ASM) -I src -o $(TEST_PIXELS_BIN) src/test_pixels.z80
+
+run-test-pixels: test-pixels
+	@./tools/run_fuse.sh --zesarux $(TEST_PIXELS_TAP)
+
+diag-pixels: dirs check-assembler $(DIAG_BIN)
+	@mkdir -p $(DIST_DIR)
+	@./tools/bin_to_tap.sh $(DIAG_BIN) $(DIAG_TAP) 32768 DIAGPIX 32768
+	@echo "Built $(DIAG_TAP)"
+
+$(DIAG_BIN): src/main_diag.z80
+	$(ASM) -I src -o $(DIAG_BIN) src/main_diag.z80
+
+run-diag-pixels: diag-pixels
+	@./tools/run_fuse.sh --zesarux $(DIAG_TAP)
 
 check: check-tools assemble
 	@echo "Checks passed"

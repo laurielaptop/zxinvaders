@@ -1,0 +1,75 @@
+; Diagnostic version - write shot state to screen as visible pattern
+; This will help us see if shot spawn/update is working even if draw is broken
+
+org 32768
+
+jp START
+
+include "constants.z80"
+include "platform/video.z80"
+include "platform/input.z80"
+include "platform/timing.z80"
+include "game/video_helpers.z80"
+include "game/player.z80"
+include "game/shot.z80"
+
+START:
+    di
+    ld sp, STACK_TOP
+
+    call Video_Init
+    call Player_Init
+    call Shot_Init
+
+MAIN_LOOP:
+    ; Erase old sprites
+    call Player_Erase
+    call Shot_Erase
+    
+    ; Update game state
+    call Player_Update
+    call Shot_Update
+    
+    ; Draw new sprites
+    call Player_Draw
+    call Shot_Draw
+    
+    ; DIAGNOSTIC: Draw shot state at top of screen
+    call Diag_ShowShotState
+    
+    call Timing_WaitShort
+    jr MAIN_LOOP
+
+Diag_ShowShotState:
+    ; Draw shot data as visible bytes at screen top
+    ld hl, 16384 + 64       ; Top of screen, offset a bit
+    ld de, SHOT_LIST_BASE
+    
+    ; Draw X position
+    ld a, (de)
+    ld (hl), a
+    inc hl
+    inc de
+    
+    ; Draw Y position
+    ld a, (de)
+    ld (hl), a
+    inc hl
+    inc de
+    
+    ; Draw PREV_Y
+    ld a, (de)
+    ld (hl), a
+    inc hl
+    inc de
+    
+    ; Draw ACTIVE flag (will be 0x00 or 0x01, should be visible as pixel)
+    ld a, (de)
+    ld (hl), 0xFF           ; Always draw white to mark position
+    inc hl
+    ld (hl), a              ; Draw actual value
+    ret
+
+STACK_TOP: equ 65535
+
+end START

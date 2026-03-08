@@ -1,0 +1,326 @@
+; Alien grid module
+; Step 2: static alien formation rendering
+
+Aliens_Init:
+    ; Mark all aliens alive in a flat ALIEN_COUNT byte array
+    ld hl, ALIEN_GRID_BASE
+    ld b, ALIEN_COUNT
+Aliens_InitLoop:
+    ld (hl), 1
+    inc hl
+    djnz Aliens_InitLoop
+    
+    ; Initialize movement state
+    ld a, ALIEN_INIT_X
+    ld (ALIEN_REF_X), a
+    ld (ALIEN_PREV_REF_X), a
+    ld a, ALIEN_INIT_Y
+    ld (ALIEN_REF_Y), a
+    ld (ALIEN_PREV_REF_Y), a
+    ld a, 2
+    ld (ALIEN_DELTA_X), a      ; Start moving right (+2)
+    xor a
+    ld (ALIEN_DELTA_Y), a      ; No vertical movement initially
+    ld (ALIEN_ANIM_FRAME), a   ; Animation frame 0
+    ld (ALIEN_MOVE_COUNTER), a ; Reset counter
+    ret
+
+Aliens_Erase:
+    ; Erase all aliens at previous reference position
+    ld ix, ALIEN_GRID_BASE       ; Alive flag pointer (not used for erase)
+    ld d, ALIEN_ROWS             ; Row counter
+    ld a, (ALIEN_PREV_REF_Y)
+    ld c, a                      ; Row Y from previous reference
+
+Aliens_EraseRowLoop:
+    push de
+    push bc
+
+    ld e, ALIEN_COLS             ; Column counter
+    ld a, (ALIEN_PREV_REF_X)
+    ld b, a                      ; Column X from previous reference
+
+Aliens_EraseColLoop:
+    push bc
+    push de
+
+    ; HL = bitmap address for this alien slot
+    ld a, b                      ; A = X
+    call Video_CalcAddress
+
+    ; Always clear 8x8 block (erase both alive and dead)
+    ld a, ALIEN_HEIGHT
+Aliens_EraseClearLoop:
+    ld b, a
+    xor a
+    ld (hl), a
+    inc h
+    ld a, b
+    dec a
+    jr nz, Aliens_EraseClearLoop
+
+    pop de
+    pop bc
+    inc ix                       ; Next alien flag (even though not checked)
+    ld a, b
+    add a, ALIEN_SPACING_X
+    ld b, a
+    dec e
+    jr nz, Aliens_EraseColLoop
+
+    pop bc
+    pop de
+    ld a, c
+    add a, ALIEN_SPACING_Y
+    ld c, a
+    dec d
+    jr nz, Aliens_EraseRowLoop
+    ret
+
+Aliens_Draw:
+    ; Draw alive aliens and clear dead aliens every frame
+    ld ix, ALIEN_GRID_BASE       ; Alive flag pointer
+    ld d, ALIEN_ROWS             ; Row counter
+    ld a, (ALIEN_REF_Y)
+    ld c, a                      ; Row Y from reference
+
+Aliens_DrawRowLoop:
+    push de
+    push bc
+
+    ld e, ALIEN_COLS             ; Column counter
+    ld a, (ALIEN_REF_X)
+    ld b, a                      ; Column X from reference
+
+Aliens_DrawColLoop:
+    push bc
+    push de
+    push ix
+
+    ; HL = bitmap address for this alien slot
+    ld a, b                      ; A = X
+    call Video_CalcAddress
+
+    ; Draw sprite if alive, otherwise clear 8x8 block
+    ld a, (ix+0)
+    or a
+    jr z, Aliens_DrawDead
+
+    ld de, ALIEN_SPRITE_DATA
+    ld a, ALIEN_HEIGHT
+Aliens_DrawAliveLoop:
+    ld b, a
+    ld a, (de)
+    ld (hl), a
+    inc de
+    inc h
+    ld a, b
+    dec a
+    jr nz, Aliens_DrawAliveLoop
+    jr Aliens_DrawSlotDone
+
+Aliens_DrawDead:
+    ld a, ALIEN_HEIGHT
+Aliens_DrawDeadLoop:
+    ld b, a
+    xor a
+    ld (hl), a
+    inc h
+    ld a, b
+    dec a
+    jr nz, Aliens_DrawDeadLoop
+
+Aliens_DrawSlotDone:
+    pop ix
+    pop de
+    pop bc
+
+    inc ix
+    ld a, b
+    add a, ALIEN_SPACING_X
+    ld b, a
+    dec e
+    jr nz, Aliens_DrawColLoop
+
+    pop bc
+    pop de
+
+    ld a, c
+    add a, ALIEN_SPACING_Y
+    ld c, a
+    dec d
+    jr nz, Aliens_DrawRowLoop
+
+    ret
+
+Aliens_CheckShotCollision:
+    ; Single-shot collision test against alien grid
+    ; On hit: alien alive flag -> 0, shot active -> 0, +10 score
+
+    ; If shot inactive, nothing to do
+    ld hl, SHOT_LIST_BASE + SHOT_ACTIVE
+    ld a, (hl)
+    or a
+    ret z
+
+    ; Load shot coordinates
+    ld hl, SHOT_LIST_BASE
+    ld a, (hl)
+    ld b, a                      ; B = shot X
+    inc hl
+    ld a, (hl)
+    ld c, a                      ; C = shot Y
+
+    ; Bounds in X within alien formation area
+    ld a, b
+    ld hl, ALIEN_REF_X
+    sub (hl)
+    ret c
+    cp ALIEN_COLS * ALIEN_SPACING_X
+    ret nc
+    ld d, a                      ; D = relative X
+
+    ; Bounds in Y within alien formation area
+    ld a, c
+    ld hl, ALIEN_REF_Y
+    sub (hl)
+    ret c
+    cp ALIEN_ROWS * ALIEN_SPACING_Y
+    ret nc
+    ld e, a                      ; E = relative Y
+
+    ; Find column index and X-in-cell remainder
+    ld b, 0                      ; B = col index
+    ld a, d
+Aliens_ColDivLoop:
+    cp ALIEN_SPACING_X
+    jr c, Aliens_ColDivDone
+    sub ALIEN_SPACING_X
+    inc b
+    jr Aliens_ColDivLoop
+Aliens_ColDivDone:
+    cp ALIEN_WIDTH               ; Ignore horizontal spacing gap
+    ret nc
+    ld d, b                      ; D = col index
+
+    ; Find row index and Y-in-cell remainder
+    ld b, 0                      ; B = row index
+    ld a, e
+Aliens_RowDivLoop:
+    cp ALIEN_SPACING_Y
+    jr c, Aliens_RowDivDone
+    sub ALIEN_SPACING_Y
+    inc b
+    jr Aliens_RowDivLoop
+Aliens_RowDivDone:
+    cp ALIEN_HEIGHT              ; Ignore vertical spacing gap
+    ret nc
+    ld e, b                      ; E = row index
+
+    ; Convert (row,col) to flat index = row*11 + col
+    ld a, e                      ; A = row
+    add a, a                     ; 2r
+    ld h, a                      ; H = 2r
+    add a, a                     ; 4r
+    add a, a                     ; 8r
+    add a, h                     ; 10r
+    add a, e                     ; 11r
+    add a, d                     ; + col
+
+    ; Check alien alive flag
+    ld hl, ALIEN_GRID_BASE
+    ld e, a
+    ld d, 0
+    add hl, de
+    ld a, (hl)
+    or a
+    ret z
+
+    ; Kill alien
+    ld (hl), 0
+
+    ; Deactivate shot
+    ld hl, SHOT_LIST_BASE + SHOT_ACTIVE
+    ld (hl), 0
+
+    ; Update score (low byte only for now)
+    ld hl, STATE_SCORE
+    ld a, (hl)
+    add a, 10
+    ld (hl), a
+Aliens_Move:
+    ; Move the alien formation following original ref-alien logic
+    
+    ; Check move counter
+    ld hl, ALIEN_MOVE_COUNTER
+    inc (hl)
+    ld a, (hl)
+    cp ALIEN_MOVE_DELAY
+    ret c                        ; Not time to move yet
+    ld (hl), 0                   ; Reset counter
+    
+    ; Save current position as previous (for erase)
+    ld a, (ALIEN_REF_X)
+    ld (ALIEN_PREV_REF_X), a
+    ld a, (ALIEN_REF_Y)
+    ld (ALIEN_PREV_REF_Y), a
+    
+    ; Apply delta to reference position
+    ld a, (ALIEN_REF_X)
+    ld b, a
+    ld a, (ALIEN_DELTA_X)
+    add a, b
+    ld (ALIEN_REF_X), a          ; Update X
+    
+    ld a, (ALIEN_REF_Y)
+    ld b, a
+    ld a, (ALIEN_DELTA_Y)
+    add a, b
+    ld (ALIEN_REF_Y), a          ; Update Y
+    
+    ; Toggle animation frame
+    ld a, (ALIEN_ANIM_FRAME)
+    xor 1
+    ld (ALIEN_ANIM_FRAME), a
+    
+    ; Check for edge collision
+    ld a, (ALIEN_REF_X)
+    cp ALIEN_EDGE_LEFT
+    jr c, Aliens_HitLeftEdge
+    cp ALIEN_EDGE_RIGHT
+    jr nc, Aliens_HitRightEdge
+    
+    ; Clear vertical movement if it was set
+    ld a, (ALIEN_DELTA_Y)
+    or a
+    ret z                        ; Already 0
+    xor a
+    ld (ALIEN_DELTA_Y), a
+    ret
+    
+Aliens_HitLeftEdge:
+    ld a, 2
+    ld (ALIEN_DELTA_X), a        ; Reverse to right
+    ld a, ALIEN_STEP_DOWN
+    ld (ALIEN_DELTA_Y), a        ; Step down
+    ret
+    
+Aliens_HitRightEdge:
+    ld a, -2
+    ld (ALIEN_DELTA_X), a        ; Reverse to left
+    ld a, ALIEN_STEP_DOWN
+    ld (ALIEN_DELTA_Y), a        ; Step down
+    ret
+
+    ret
+
+; Simple invader-like 8x8 pattern
+ALIEN_SPRITE_DATA:
+    db 0x18
+    db 0x3C
+    db 0x7E
+    db 0xDB
+    db 0xFF
+    db 0x24
+    db 0x5A
+    db 0xA5
