@@ -53,6 +53,9 @@ Aliens_EraseColLoop:
 Aliens_EraseClearLoop:
     xor a
     ld (hl), a
+    inc l
+    ld (hl), a
+    dec l
     call Aliens_NextScanline
     dec c
     jr nz, Aliens_EraseClearLoop
@@ -104,12 +107,17 @@ Aliens_DrawColLoop:
     or a
     jr z, Aliens_DrawDead
 
-    ld de, ALIEN_SPRITE_DATA
+    call Aliens_SelectValidationSprite
     ld c, ALIEN_HEIGHT
 Aliens_DrawAliveLoop:
     ld a, (de)
     ld (hl), a
     inc de
+    inc l
+    ld a, (de)
+    ld (hl), a
+    inc de
+    dec l
     call Aliens_NextScanline
     dec c
     jr nz, Aliens_DrawAliveLoop
@@ -120,6 +128,9 @@ Aliens_DrawDead:
 Aliens_DrawDeadLoop:
     xor a
     ld (hl), a
+    inc l
+    ld (hl), a
+    dec l
     call Aliens_NextScanline
     dec c
     jr nz, Aliens_DrawDeadLoop
@@ -162,6 +173,41 @@ Aliens_NextScanline:
     ld a, h
     sub 0x08
     ld h, a
+    ret
+
+Aliens_SelectValidationSprite:
+    ; Use ROM-derived alien tables transformed with a fixed pipeline.
+    ; Select alien type by row (like original rack variety).
+    ld a, ALIEN_ROWS
+    sub d                      ; Row index 0..4
+    cp 2
+    jr c, Aliens_SelectCW_TypeA
+    cp 4
+    jr c, Aliens_SelectCW_TypeB
+    jr Aliens_SelectCW_TypeC
+
+Aliens_SelectCW_TypeA:
+    ld a, (ALIEN_ANIM_FRAME)
+    or a
+    ld de, ALIEN_A_CW_F0
+    ret z
+    ld de, ALIEN_A_CW_F1
+    ret
+
+Aliens_SelectCW_TypeB:
+    ld a, (ALIEN_ANIM_FRAME)
+    or a
+    ld de, ALIEN_B_CW_F0
+    ret z
+    ld de, ALIEN_B_CW_F1
+    ret
+
+Aliens_SelectCW_TypeC:
+    ld a, (ALIEN_ANIM_FRAME)
+    or a
+    ld de, ALIEN_C_CW_F0
+    ret z
+    ld de, ALIEN_C_CW_F1
     ret
 
 Aliens_CheckShotCollision:
@@ -389,13 +435,4 @@ Aliens_Reset:
 
     ret
 
-; Simple invader-like 8x8 pattern
-ALIEN_SPRITE_DATA:
-    db 0x18
-    db 0x3C
-    db 0x7E
-    db 0xDB
-    db 0xFF
-    db 0x24
-    db 0x5A
-    db 0xA5
+include "game/alien_sprites_rom_rotated.z80"

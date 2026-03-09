@@ -14,6 +14,9 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Saucer/UFO is fully implemented** with tuned ZX timing (256 game-loop countdown under current busy-wait pacing), horizontal movement, direction determination based on shot count, score table advancement (50/100/150/300 points), hit detection, and explosion sequence.
 - **Player and alien explosion systems are implemented** (timed animation, hit-triggered state machines, and cleanup).
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
+- **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
+- **Alien sprite parity is complete** (ROM-derived A/B/C row families, 2-frame animation, deterministic transform pipeline).
+- **Player sprite parity is still open** despite deterministic table tests; current blocker is renderer/table interpretation.
 ## Current Toolchain (macOS CLI)
 - Assembler: `z80asm` v1.8 (Homebrew)
 - Emulators: 
@@ -79,11 +82,14 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - Player lives are tracked but not yet fully represented in HUD/game state flow.
 - Game over and wave progression flow are not yet implemented.
 - Saucer bring-up diagnostics have been removed from the main loop after render/timing validation.
+- Player sprite path still needs final table/byte-order lock to match arcade silhouette.
 
 ### Gameplay Parity Gaps (Confirmed)
 - Saucer/UFO bonus target is now implemented (timed top-row flyby + score award based on arcade behavior, with timing currently calibrated for busy-wait frame pacing).
 - Alien shot system is currently simplified and does not yet implement three arcade shot families.
-- Alien rendering uses a single sprite pattern today; row-specific alien art parity is not complete.
+- Alien rendering now uses row-specific arcade-derived sprite families and frame toggling.
+- Player sprite currently does not match the original silhouette in-game; further renderer-isolation is required.
+- Sprite source mapping and render/animation behavior are now documented in `docs/graphics-animation-parity.md`.
 - Explosion animation parity is partial: player and alien explosions are in place; remaining parity gaps are secondary shot/saucer side-effect details.
 
 ### Source-First Rule For Remaining Features
@@ -100,6 +106,7 @@ Target documents to produce/extend next:
 - `docs/saucer-ufo-logic.md`
 - `docs/alien-shot-types-logic.md`
 - `docs/alien-graphics-animation-logic.md`
+- `docs/graphics-animation-parity.md`
 - `docs/explosions-logic.md`
 
 ### Remaining Steps
@@ -109,10 +116,15 @@ Target documents to produce/extend next:
 4. Implement bases/shields with damage and collision behavior.
 5. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.
 6. Expand enemy fire to arcade-like shot families and reload/timing parity.
-7. Implement row-specific alien sprites and animation parity.
-8. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
-9. End-phase optimization: ISR-synchronized rendering to reduce flicker.
-10. Audio pass: fire, hit, and alien movement sound effects.
+7. Resolve player sprite parity by isolating shifted-draw interpretation (byte-aligned A/B candidate tables), then lock final player table.
+8. Replace placeholder saucer/shield/shot graphics with source-derived monochrome sprite tables.
+9. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
+10. End-phase optimization: ISR-synchronized rendering to reduce flicker.
+11. Audio pass: fire, hit, and alien movement sound effects.
+
+## Build/Run Verification Note
+- `make run-zesarux` is the correct command and does rebuild/package before launch.
+- Artifact timestamps in `build/zxinvaders.bin` and `dist/zxinvaders.tap` were verified to refresh during iteration.
 
 ## Input Mapping
 - Left: `O` (row DFFE, bit 1)

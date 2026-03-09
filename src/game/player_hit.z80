@@ -100,7 +100,7 @@ PlayerHit_EraseLoop:
     dec l
     
 PlayerHit_EraseNext:
-    inc h
+    call PlayerHit_NextScanline
     djnz PlayerHit_EraseLoop
     ret
 
@@ -190,8 +190,25 @@ PlayerHit_DrawAligned:
     pop de
     
 PlayerHit_DrawNext:
-    inc h
+    call PlayerHit_NextScanline
     djnz PlayerHit_DrawLoop
+    ret
+
+PlayerHit_NextScanline:
+    ; Advance HL to next pixel row in ZX bitmap memory.
+    inc h
+    ld a, h
+    and 0x07
+    ret nz
+
+    ld a, l
+    add a, 0x20
+    ld l, a
+    ret c
+
+    ld a, h
+    sub 0x08
+    ld h, a
     ret
 
 ; Explosion sprite patterns (8x8 pixels)

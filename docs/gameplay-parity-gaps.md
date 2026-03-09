@@ -15,7 +15,9 @@ This note captures missing gameplay elements that must be documented from `resou
 - Shields: COMPLETE (4 shields with erase/draw cycle, proper 48-pixel spacing)
 - Saucer/UFO: COMPLETE (tuned 256-loop countdown for current busy-wait pacing, horizontal movement with direction logic, score table 50/100/150/300, hit detection, explosion sequence)
 - Alien shot families: partial (single simplified system exists)
-- Alien row graphics/animation: partial (movement animation state exists, row art parity incomplete)
+- Alien row graphics/animation: COMPLETE (row type A/B/C mapping and 2-frame animation from ROM-derived tables)
+- Player sprite parity: BLOCKED (source data integrated but renderer/table interpretation still mismatched)
+- Graphics/source analysis: complete for sprite assets and animation/render pipeline (`docs/graphics-animation-parity.md`)
 - Explosions: partial
   - Player explosion: implemented and arcade-style timed.
   - Alien explosion: implemented and positioned from hit slot coordinates.
@@ -50,6 +52,7 @@ Note: original logic initializes **4 shields** (`LD C,$04` at `resources/source.
 - Cursor/one-alien-at-a-time draw cadence: `resources/source.z80:203` (`CursorNextAlien`)
 - Frame toggle in reference movement: `resources/source.z80:276` (`MoveRefAlien`)
 - Row/type mapping in draw path: around `0x0119..0x0121`
+- Full source-to-ZX sprite parity analysis: `docs/graphics-animation-parity.md`
 
 ### 5) Explosions
 - Player blowup state machine: `resources/source.z80:513` (`GameObj0` hit/blowup)
@@ -64,8 +67,15 @@ Note: original logic initializes **4 shields** (`LD C,$04` at `resources/source.
 2. Implement shields and shield collision degradation.
 3. Document and implement saucer/UFO timing + score behavior.
 4. Document and implement alien shot family expansion on top of existing column-fire base.
-5. Add row-specific alien art + animation parity.
-6. Integrate explosion state machines and sprite sequences.
+5. Integrate explosion state machines and sprite sequences.
+
+## Graphics Parity Ready State
+
+- Source bitmap tables for player, aliens, saucer, shields, and all shot families are now cataloged.
+- Original render path semantics (`DrawSprite`, `DrawShiftedSprite`, `EraseShifted`, collision draw) are documented.
+- Alien tables are now migrated from source ROM blocks using deterministic transform tooling.
+- Player sprite parity remains open and should be solved by renderer-isolation (byte-aligned A/B tables) before resuming wider sprite migration.
+- Next implementation can proceed module-by-module for saucer/shields/shots after player table lock.
 
 ## Open Decision
 

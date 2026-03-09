@@ -166,7 +166,7 @@ EnemyShot_YLoop:
     dec e
     jr nz, EnemyShot_YLoop
 EnemyShot_YDone:
-    add a, 8
+    add a, ALIEN_HEIGHT
     ld d, a
 
     ld a, 1
@@ -255,27 +255,27 @@ EnemyShot_CheckLoop:
     call Player_GetPosition      ; Returns X in B, Y in C
     pop de
     
-    ; Check if shot overlaps player (8x8 sprite)
+    ; Check if shot overlaps player sprite bounds.
     ; Shot is at (D, E)
     ; Player is at (B, C)
     
-    ; Check X overlap: D >= B and D < B+8
+    ; Check X overlap: D >= B and D < B+PLAYER_WIDTH
     ld a, d
     cp b
     jr c, EnemyShot_NoHit        ; Shot X < Player X
     ld a, b
-    add a, 8
+    add a, PLAYER_WIDTH
     cp d
-    jr c, EnemyShot_NoHit        ; Shot X >= Player X + 8
+    jr c, EnemyShot_NoHit        ; Shot X >= Player X + PLAYER_WIDTH
     
-    ; Check Y overlap: E >= C and E < C+8
+    ; Check Y overlap: E >= C and E < C+PLAYER_HEIGHT
     ld a, e
     cp c
     jr c, EnemyShot_NoHit        ; Shot Y < Player Y
     ld a, c
-    add a, 8
+    add a, PLAYER_HEIGHT
     cp e
-    jr c, EnemyShot_NoHit        ; Shot Y >= Player Y + 8
+    jr c, EnemyShot_NoHit        ; Shot Y >= Player Y + PLAYER_HEIGHT
     
     ; Hit detected!
     pop bc

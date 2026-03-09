@@ -40,15 +40,15 @@ Shot_Spawn:
     inc hl
     ld c, (hl)              ; C = player Y
     
-    ; Spawn shot at center of player
-    add a, 4                ; Center: player X + 4 pixels
+    ; Spawn shot at center of player sprite.
+    add a, 8                ; Center: player X + (PLAYER_WIDTH / 2)
     ld hl, SHOT_LIST_BASE
     ld (hl), a              ; Set shot X
     inc hl
     
     ; Start shot above player
     ld a, c
-    sub 8                   ; Start 8 pixels above player
+    sub PLAYER_HEIGHT       ; Start above player sprite
     ld (hl), a              ; Set shot Y
     inc hl
     ld (hl), a              ; Set PREV_Y same as Y initially

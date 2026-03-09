@@ -1,0 +1,8 @@
+; Arcade-source player sprite table for ZX renderer.
+; Bitmap extracted from resources/gameplay.gif (player component at x=103..115, y=208..215),
+; then padded to 16x8 for this renderer.
+; Output geometry: 16x8 (2 bytes per row, 8 rows).
+
+PLAYER_SHIP_CW:
+    db 0x01, 0x00, 0x03, 0x80, 0x03, 0x80, 0x3F, 0xF8
+    db 0x7F, 0xFC, 0x7F, 0xFC, 0x7F, 0xFC, 0x7F, 0xFC

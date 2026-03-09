@@ -113,24 +113,29 @@ Player_Erase:
     and 0x07
     ld c, a
     
-    ; Erase 8x8 area with zeros
+    ; Erase PLAYER_WIDTH x PLAYER_HEIGHT area with zeros
     ld b, PLAYER_HEIGHT
     
 Player_EraseLoop:
     ld a, 0                     ; Erase with zeros
     ld (hl), a
-    
-    ; If not byte-aligned, clear the adjacent byte too
+    inc l
+    ld (hl), a
+    dec l
+
+    ; For shifted 16px sprite rows, clear the third byte as well.
     ld a, c
     or a
     jr z, Player_EraseNextRow
     inc l
-    ld a, 0
+    inc l
+    xor a
     ld (hl), a
+    dec l
     dec l
     
 Player_EraseNextRow:
-    inc h
+    call Player_NextScanline
     djnz Player_EraseLoop
     ret
 
@@ -156,65 +161,106 @@ Player_Draw:
     and 0x07
     ld c, a
     
-    ; Draw 8x8 player sprite
-    ld de, PLAYER_SPRITE_DATA
+    ; Draw ROM-derived CCW-rotated player sprite (16x8)
+    ld de, PLAYER_SHIP_CW
     ld b, PLAYER_HEIGHT
     
 Player_DrawLoop:
-    ld a, (de)                  ; Source row bits
+    ; Source row is 16 pixels packed as two bytes.
+    ld a, (de)
     inc de
-    push de                     ; Preserve sprite pointer (E is reused below)
+    ld d, a                     ; High source byte
+    ld a, (de)
+    inc de
+    ld e, a                     ; Low source byte
+    push de                     ; Preserve sprite pointer
+    push bc                     ; Preserve row counter and bit offset
 
-    ; If byte-aligned, write a single byte.
-    ld d, a
+    ; If byte-aligned, write two bytes.
     ld a, c
     or a
     jr z, Player_DrawAligned
 
-    ; Left byte: source >> offset
+    ; Byte 0: high >> offset
     ld a, d
-    ld e, c
+    ld b, c
 Player_ShiftRightLoop:
     srl a
-    dec e
-    jr nz, Player_ShiftRightLoop
+    djnz Player_ShiftRightLoop
     ld (hl), a
 
-    ; Right byte: source << (8 - offset)
+    ; Byte 1: (high << (8-offset)) | (low >> offset)
     ld a, 8
     sub c
-    ld e, a
+    ld b, a
     ld a, d
-Player_ShiftLeftLoop:
+Player_ShiftLeftHighLoop:
     sla a
-    dec e
-    jr nz, Player_ShiftLeftLoop
+    djnz Player_ShiftLeftHighLoop
+    ld d, a
+
+    ld a, e
+    ld b, c
+Player_ShiftRightLowLoop:
+    srl a
+    djnz Player_ShiftRightLowLoop
+    or d
     inc l
     ld (hl), a
     dec l
+
+    ; Byte 2: low << (8-offset)
+    ld a, 8
+    sub c
+    ld b, a
+    ld a, e
+Player_ShiftLeftLowLoop:
+    sla a
+    djnz Player_ShiftLeftLowLoop
+    inc l
+    inc l
+    ld (hl), a
+    dec l
+    dec l
+
+    pop bc
     pop de
     jr Player_DrawNextRow
 
 Player_DrawAligned:
     ld a, d
     ld (hl), a
+    inc l
+    ld a, e
+    ld (hl), a
+    dec l
+    pop bc
     pop de
 
 Player_DrawNextRow:
-    inc h
+    call Player_NextScanline
     djnz Player_DrawLoop
     
     ret
 
-PLAYER_SPRITE_DATA:
-    db 0x3C    ; ·███··
-    db 0x7E    ; ·█████·
-    db 0xFF    ; ███████
-    db 0xFF    ; ███████
-    db 0xFF    ; ███████
-    db 0xFF    ; ███████
-    db 0x7E    ; ·█████·
-    db 0x3C    ; ·███··
+Player_NextScanline:
+    ; Advance HL to next pixel row in ZX bitmap memory.
+    inc h
+    ld a, h
+    and 0x07
+    ret nz
+
+    ld a, l
+    add a, 0x20
+    ld l, a
+    ret c
+
+    ld a, h
+    sub 0x08
+    ld h, a
+    ret
+
+include "game/player_sprite_rom_rotated.z80"
 
 Player_GetPosition:
     ; Return player position in B (X) and C (Y)
