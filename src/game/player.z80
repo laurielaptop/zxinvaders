@@ -28,6 +28,11 @@ Player_Init:
     ret
 
 Player_Update:
+    ; Check if player is blowing up - skip movement/firing if so
+    ld a, (GAME_RAM_BASE + PLAYER_STATUS)
+    cp 0xFF
+    ret nz                      ; Player is blowing up, no control
+    
     ; Read input state from A (left, right, fire bits)
     call Input_ReadState
     
@@ -85,6 +90,11 @@ Player_UpdateDone:
     ret
 
 Player_Erase:
+    ; Check if player is blowing up - skip normal erase if so
+    ld a, (GAME_RAM_BASE + PLAYER_STATUS)
+    cp 0xFF
+    ret nz                      ; Player is blowing up, don't erase normal sprite
+    
     ; Erase player sprite at previous XY position by drawing zeros
     ld hl, GAME_RAM_BASE + PLAYER_PREV_X
     ld a, (hl)                  ; A = previous X
@@ -125,6 +135,11 @@ Player_EraseNextRow:
     ret
 
 Player_Draw:
+    ; Check if player is blowing up - skip normal draw if so
+    ld a, (GAME_RAM_BASE + PLAYER_STATUS)
+    cp 0xFF
+    ret nz                      ; Player is blowing up, don't draw normal sprite
+    
     ; Draw player sprite at current XY position
     ld hl, GAME_RAM_BASE + PLAYER_OBJ_OFFSET
     ld a, (hl)                  ; A = X

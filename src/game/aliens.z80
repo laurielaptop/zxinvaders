@@ -49,14 +49,12 @@ Aliens_EraseColLoop:
     call Video_CalcAddress
 
     ; Always clear 8x8 block (erase both alive and dead)
-    ld a, ALIEN_HEIGHT
+    ld c, ALIEN_HEIGHT
 Aliens_EraseClearLoop:
-    ld b, a
     xor a
     ld (hl), a
-    inc h
-    ld a, b
-    dec a
+    call Aliens_NextScanline
+    dec c
     jr nz, Aliens_EraseClearLoop
 
     pop de
@@ -107,27 +105,23 @@ Aliens_DrawColLoop:
     jr z, Aliens_DrawDead
 
     ld de, ALIEN_SPRITE_DATA
-    ld a, ALIEN_HEIGHT
+    ld c, ALIEN_HEIGHT
 Aliens_DrawAliveLoop:
-    ld b, a
     ld a, (de)
     ld (hl), a
     inc de
-    inc h
-    ld a, b
-    dec a
+    call Aliens_NextScanline
+    dec c
     jr nz, Aliens_DrawAliveLoop
     jr Aliens_DrawSlotDone
 
 Aliens_DrawDead:
-    ld a, ALIEN_HEIGHT
+    ld c, ALIEN_HEIGHT
 Aliens_DrawDeadLoop:
-    ld b, a
     xor a
     ld (hl), a
-    inc h
-    ld a, b
-    dec a
+    call Aliens_NextScanline
+    dec c
     jr nz, Aliens_DrawDeadLoop
 
 Aliens_DrawSlotDone:
@@ -153,91 +147,164 @@ Aliens_DrawSlotDone:
 
     ret
 
+Aliens_NextScanline:
+    ; Advance HL to next pixel row in ZX bitmap memory.
+    inc h
+    ld a, h
+    and 0x07
+    ret nz
+
+    ld a, l
+    add a, 0x20
+    ld l, a
+    ret c
+
+    ld a, h
+    sub 0x08
+    ld h, a
+    ret
+
 Aliens_CheckShotCollision:
-    ; Single-shot collision test against alien grid
-    ; On hit: alien alive flag -> 0, shot active -> 0, +10 score
+    ; Swept rectangle collision against live alien slots.
+    ; This checks shot X against each alive alien's 8-pixel width and
+    ; shot swept Y range [currentY .. prevY+SHOT_HEIGHT-1] against alien 8-pixel height.
 
     ; If shot inactive, nothing to do
     ld hl, SHOT_LIST_BASE + SHOT_ACTIVE
     ld a, (hl)
     or a
+    call z, Debug_CollisionProbeNoShot
     ret z
 
-    ; Load shot coordinates
+    call Debug_CollisionProbeScan
+
+    ; Load shot X and sweep start Y (current Y)
     ld hl, SHOT_LIST_BASE
     ld a, (hl)
     ld b, a                      ; B = shot X
     inc hl
     ld a, (hl)
-    ld c, a                      ; C = shot Y
+    ld c, a                      ; C = sweep start Y (current Y)
 
-    ; Bounds in X within alien formation area
-    ld a, b
-    ld hl, ALIEN_REF_X
-    sub (hl)
-    ret c
-    cp ALIEN_COLS * ALIEN_SPACING_X
-    ret nc
-    ld d, a                      ; D = relative X
+    ; D = row index, L = current row top Y
+    ld d, 0
+    ld a, (ALIEN_REF_Y)
+    ld l, a
 
-    ; Bounds in Y within alien formation area
-    ld a, c
-    ld hl, ALIEN_REF_Y
-    sub (hl)
-    ret c
-    cp ALIEN_ROWS * ALIEN_SPACING_Y
-    ret nc
-    ld e, a                      ; E = relative Y
-
-    ; Find column index and X-in-cell remainder
-    ld b, 0                      ; B = col index
+Aliens_RowScanLoop:
     ld a, d
-Aliens_ColDivLoop:
-    cp ALIEN_SPACING_X
-    jr c, Aliens_ColDivDone
-    sub ALIEN_SPACING_X
-    inc b
-    jr Aliens_ColDivLoop
-Aliens_ColDivDone:
-    cp ALIEN_WIDTH               ; Ignore horizontal spacing gap
+    cp ALIEN_ROWS
     ret nc
-    ld d, b                      ; D = col index
 
-    ; Find row index and Y-in-cell remainder
-    ld b, 0                      ; B = row index
+    ; E = col index, H = current col left X
+    ld e, 0
+    ld a, (ALIEN_REF_X)
+    and 0xF8                   ; Match renderer: sprite X is byte-snapped
+    ld h, a
+
+Aliens_ColScanLoop:
     ld a, e
-Aliens_RowDivLoop:
-    cp ALIEN_SPACING_Y
-    jr c, Aliens_RowDivDone
-    sub ALIEN_SPACING_Y
-    inc b
-    jr Aliens_RowDivLoop
-Aliens_RowDivDone:
-    cp ALIEN_HEIGHT              ; Ignore vertical spacing gap
-    ret nc
-    ld e, b                      ; E = row index
+    cp ALIEN_COLS
+    jr nc, Aliens_NextRow
 
-    ; Convert (row,col) to flat index = row*11 + col
-    ld a, e                      ; A = row
+    ; X overlap: shotX in [alienX, alienX+ALIEN_WIDTH-1]
+    ld a, b
+    cp h
+    jr c, Aliens_NextCol
+    sub h
+    cp ALIEN_WIDTH
+    jr nc, Aliens_NextCol
+
+    ; Y overlap part 1: sweep end (prevY + height - 1) must be >= alienY
+    ld a, (SHOT_LIST_BASE + SHOT_PREV_Y)
+    add a, SHOT_HEIGHT - 1
+    cp l
+    jr c, Aliens_NextCol
+
+    ; Y overlap part 2: sweep start (currentY) must be <= alien bottom
+    ld a, c
+    sub l
+    jr c, Aliens_YOverlaps
+    cp ALIEN_HEIGHT
+    jr nc, Aliens_NextCol
+
+Aliens_YOverlaps:
+    ; Check alive flag for this (row,col)
+    push de
+    push hl
+    ld a, d                      ; A = row
     add a, a                     ; 2r
     ld h, a                      ; H = 2r
     add a, a                     ; 4r
     add a, a                     ; 8r
     add a, h                     ; 10r
-    add a, e                     ; 11r
-    add a, d                     ; + col
-
-    ; Check alien alive flag
-    ld hl, ALIEN_GRID_BASE
+    add a, d                     ; 11r
+    add a, e                     ; + col
     ld e, a
     ld d, 0
+    ld hl, ALIEN_GRID_BASE
     add hl, de
     ld a, (hl)
+    pop hl
+    pop de
     or a
-    ret z
+    jr z, Aliens_NextCol
 
-    ; Kill alien
+    ; Found live alien hit.
+    ; Use the exact scanned slot coordinates for explosion placement.
+    ; H = alien X (rendered column-aligned), L = alien Y.
+    ld b, h
+    ld c, l
+
+    ; Keep D=row, E=col for index mapping.
+    call Debug_CollisionProbeHit
+    jr Aliens_DoHit
+
+Aliens_NextCol:
+    inc e
+    ld a, h
+    add a, ALIEN_SPACING_X
+    ld h, a
+    jr Aliens_ColScanLoop
+
+Aliens_NextRow:
+    inc d
+    ld a, l
+    add a, ALIEN_SPACING_Y
+    ld l, a
+    jr Aliens_RowScanLoop
+
+Aliens_DoHit:
+
+    ; Trigger explosion (don't kill alien yet, explosion will do it)
+    ; Inputs at this point:
+    ;   B = exact alien X from scanner (H)
+    ;   C = exact alien Y from scanner (L)
+    ;   D = row, E = col
+
+    ; Convert (row,col) to flat index in E for AlienHit_OnHit
+    ld a, d                      ; A = row
+    add a, a                     ; 2r
+    ld h, a                      ; H = 2r
+    add a, a                     ; 4r
+    add a, a                     ; 8r
+    add a, h                     ; 10r
+    add a, d                     ; 11r
+    add a, e                     ; + col
+    ld e, a
+    ld d, 0
+    
+    ; Call explosion handler (B=X, C=Y, DE=index)
+    call AlienHit_OnHit
+
+    ; If alien explosion is already active, still consume this shot.
+    jr z, Aliens_HitConsumeShot
+
+    ld hl, SHOT_LIST_BASE + SHOT_ACTIVE
     ld (hl), 0
+    ret
+
+Aliens_HitConsumeShot:
 
     ; Deactivate shot
     ld hl, SHOT_LIST_BASE + SHOT_ACTIVE
@@ -248,6 +315,8 @@ Aliens_RowDivDone:
     ld a, (hl)
     add a, 10
     ld (hl), a
+    ret
+
 Aliens_Move:
     ; Move the alien formation following original ref-alien logic
     
@@ -311,6 +380,12 @@ Aliens_HitRightEdge:
     ld a, ALIEN_STEP_DOWN
     ld (ALIEN_DELTA_Y), a        ; Step down
     ret
+
+; Aliens_Reset
+; Reset alien formation to initial state (for game restart)
+; Calls Aliens_Init to re-initialize
+Aliens_Reset:
+    jp Aliens_Init
 
     ret
 

@@ -1,0 +1,20 @@
+; Game/game_over.z80 - Game-over state and restart logic
+
+; GameOver_Trigger
+; Display game-over message and wait for player input or timeout
+GameOver_Trigger:
+    ; TODO: Display "GAME OVER" at screen center
+    ; TODO: Wait for START key or 3-second timeout
+    ; TODO: Call restart on any input
+    ret
+
+; GameOver_Restart
+; Reset for new wave: lives to 3, shields to intact, aliens to formation, player to center
+GameOver_Restart:
+    call Player_Init         ; Reset player position and status
+    call Aliens_Reset        ; Reset alien formation
+    call Shields_Reset       ; Reset shields to intact
+    call PlayerHit_Init      ; Reset lives to 3
+    call Shot_Reset          ; Clear any in-flight shots
+    call EnemyShot_Reset     ; Clear enemy shots
+    ret

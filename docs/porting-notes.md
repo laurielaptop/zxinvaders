@@ -10,7 +10,10 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - Enemy shots are now working with column-table-driven firing and bottom-up alien selection.
 - Basic scoring and HUD score rendering are working.
 - A reusable on-screen debug visualizer exists for enemy-shot lifecycle debugging.
-
+- **Shields are fully working** with proper erase/draw cycle and spacing (4 shields at Y=144, spaced 48 pixels horizontally).
+- **Saucer/UFO is fully implemented** with tuned ZX timing (256 game-loop countdown under current busy-wait pacing), horizontal movement, direction determination based on shot count, score table advancement (50/100/150/300 points), hit detection, and explosion sequence.
+- **Player and alien explosion systems are implemented** (timed animation, hit-triggered state machines, and cleanup).
+- **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 ## Current Toolchain (macOS CLI)
 - Assembler: `z80asm` v1.8 (Homebrew)
 - Emulators: 
@@ -45,7 +48,9 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
    - `Video_CalcAddress`: ZX Spectrum non-linear screen address calculation
    - Bit-shifted sprite rendering for pixel-precise horizontal movement (not byte-aligned)
    - Per-object erase/draw flow (no full-screen clear per frame)
-
+   - `Video_CalcAttrAddress`: Attribute address calculation for color blocks (character-aligned 8x8 areas)
+   - Bit-shifted sprite rendering for pixel-precise horizontal movement (not byte-aligned)
+   - Per-object erase/draw flow (no full-screen clear per frame)
 3. **Input System**
    - Keyboard scanning via port `0xFE` with row masks
    - Returns bitfield: bit0=left, bit1=right, bit2=fire
@@ -73,15 +78,41 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - Rendering still shows expected Spectrum flicker under full redraw load.
 - Player lives are tracked but not yet fully represented in HUD/game state flow.
 - Game over and wave progression flow are not yet implemented.
-- Diagnostic helper sources remain in tree and should be curated before release packaging.
+- Saucer bring-up diagnostics have been removed from the main loop after render/timing validation.
+
+### Gameplay Parity Gaps (Confirmed)
+- Saucer/UFO bonus target is now implemented (timed top-row flyby + score award based on arcade behavior, with timing currently calibrated for busy-wait frame pacing).
+- Alien shot system is currently simplified and does not yet implement three arcade shot families.
+- Alien rendering uses a single sprite pattern today; row-specific alien art parity is not complete.
+- Explosion animation parity is partial: player and alien explosions are in place; remaining parity gaps are secondary shot/saucer side-effect details.
+
+### Source-First Rule For Remaining Features
+For each missing gameplay element, we must complete a short 8080 behavior note before writing ZX code:
+1. Identify original routines and state bytes in `resources/source.z80`.
+2. Document control flow and timing assumptions (ISR/frame coupling, counters, flags).
+3. Define ZX adaptation contract: what must remain behaviorally identical, and what is platform-adjusted.
+4. Implement only after steps 1-3 are documented and reviewed.
+
+Target documents to produce/extend next:
+- `docs/gameplay-parity-gaps.md`
+- `docs/lives-and-game-over-logic.md`
+- `docs/shields-logic.md`
+- `docs/saucer-ufo-logic.md`
+- `docs/alien-shot-types-logic.md`
+- `docs/alien-graphics-animation-logic.md`
+- `docs/explosions-logic.md`
 
 ### Remaining Steps
 1. Implement full lives UX: HUD lives display, hit/respawn behavior polish.
 2. Add game over state and restart flow when lives reach zero.
 3. Add wave-clear detection and next-wave setup.
-4. Optional parity improvements: additional enemy shot types/reload tuning.
-5. End-phase optimization: ISR-synchronized rendering to reduce flicker.
-6. Audio pass: fire, hit, and alien movement sound effects.
+4. Implement bases/shields with damage and collision behavior.
+5. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.
+6. Expand enemy fire to arcade-like shot families and reload/timing parity.
+7. Implement row-specific alien sprites and animation parity.
+8. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
+9. End-phase optimization: ISR-synchronized rendering to reduce flicker.
+10. Audio pass: fire, hit, and alien movement sound effects.
 
 ## Input Mapping
 - Left: `O` (row DFFE, bit 1)

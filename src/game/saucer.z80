@@ -1,0 +1,539 @@
+; ===================================================================
+; Saucer (Mystery Ship / UFO) Module
+; ===================================================================
+; Implements the bonus saucer that periodically flies across top of screen
+; Awards variable points (50, 100, 150, or 300) when hit
+; Based on authentic Space Invaders arcade behavior
+
+; ===================================================================
+; Saucer_Init
+; ===================================================================
+; Initialize saucer state at game start
+; Inputs: None
+; Outputs: None
+; Destroys: AF, HL
+Saucer_Init:
+    ; Set initial inactive state
+    xor a
+    ld (SAUCER_STATE), a           ; State = 0 (inactive)
+    
+    ; Initialize countdown timer from SAUCER_INIT_DELAY
+    ld hl, SAUCER_INIT_DELAY
+    ld (SAUCER_TIMER_LSB), hl
+    
+    ; Initialize score table pointer to start
+    ld hl, SaucerScoreTable
+    ld (SAUCER_SCORE_PTR_LSB), hl
+    
+    ; Set default position (will be overwritten when active)
+    ld a, SAUCER_Y_POS
+    ld (SAUCER_Y), a
+    
+    ret
+
+; ===================================================================
+; Saucer_Update
+; ===================================================================
+; Main update function - called every game loop
+; Handles timing, activation, movement, and hit detection
+; Inputs: None
+; Outputs: None
+; Destroys: AF, BC, DE, HL
+Saucer_Update:
+    ; Check current state
+    ld a, (SAUCER_STATE)
+    or a                            ; State = 0?
+    jr z, Saucer_Update_Inactive    ; Yes, handle inactive state
+    
+    cp 1                            ; State = 1 (flying)?
+    jr z, Saucer_Update_Flying      ; Yes, handle flying state
+    
+    ; State = 2 (hit), handle explosion sequence
+    jp Saucer_Update_Hit
+
+; -------------------------------------------------------------------
+; Inactive state: Count down timer, check for activation
+; -------------------------------------------------------------------
+Saucer_Update_Inactive:
+    ; Decrement 16-bit timer
+    ld hl, (SAUCER_TIMER_LSB)
+    ld a, h
+    or l                            ; Timer = 0?
+    jr z, Saucer_TryActivate
+    
+    dec hl                          ; Decrement timer
+    ld (SAUCER_TIMER_LSB), hl
+    ret
+
+Saucer_TryActivate:
+    ; Reset timer for next saucer
+    ld hl, SAUCER_INIT_DELAY
+    ld (SAUCER_TIMER_LSB), hl
+    
+    ; Check minimum alien count (need at least 8)
+    ld a, (ALIEN_GRID_BASE + 55)    ; Check alien count indicator
+    ; TODO: Implement proper alien counting
+    ; For now, always allow saucer
+    
+    ; Activate saucer
+    call Saucer_Activate
+    ret
+
+; -------------------------------------------------------------------
+; Saucer_Activate
+; -------------------------------------------------------------------
+; Start saucer flying sequence
+; Determines direction based on shot count
+; Inputs: None
+; Outputs: None
+; Destroys: AF, HL
+Saucer_Activate:
+    ; Set state to flying
+    ld a, 1
+    ld (SAUCER_STATE), a
+    
+    ; Determine direction based on shot count LSB bit 0
+    ; (Linked to player shot firing for authentic behavior)
+    ld a, (SHOT_LIST_BASE + SHOT_ACTIVE)  ; Use shot state as pseudo-random
+    and 1                           ; Test bit 0
+    jr nz, Saucer_Activate_Left
+    
+    ; Start from left, move right
+    ld a, 0
+    ld (SAUCER_X), a
+    ld (SAUCER_PREV_X), a
+    ld a, SAUCER_SPEED
+    ld (SAUCER_DX), a
+    jr Saucer_Activate_Done
+    
+Saucer_Activate_Left:
+    ; Start from right, move left
+    ld a, SAUCER_MAX_X
+    ld (SAUCER_X), a
+    ld (SAUCER_PREV_X), a
+    ld a, -SAUCER_SPEED
+    ld (SAUCER_DX), a
+    
+Saucer_Activate_Done:
+    ; Y position is always constant
+    ld a, SAUCER_Y_POS
+    ld (SAUCER_Y), a
+    
+    ; TODO: Start saucer sound
+    
+    ret
+
+; -------------------------------------------------------------------
+; Flying state: Move saucer, check boundaries, check hits
+; -------------------------------------------------------------------
+Saucer_Update_Flying:
+    ; Erase saucer at previous position
+    call Saucer_Erase
+    
+    ; Save current X as previous
+    ld a, (SAUCER_X)
+    ld (SAUCER_PREV_X), a
+    
+    ; Move saucer
+    ld a, (SAUCER_DX)              ; Get delta
+    ld b, a                         ; Save delta
+    ld a, (SAUCER_X)               ; Get current X
+    add a, b                        ; Add delta
+    ld (SAUCER_X), a               ; Store new X
+    
+    ; Check boundaries
+    ld a, (SAUCER_DX)
+    bit 7, a                        ; Negative (moving left)?
+    jr nz, Saucer_CheckLeft
+    
+Saucer_CheckRight:
+   ; Moving right - check right boundary
+    ld a, (SAUCER_X)
+    cp SAUCER_MAX_X
+    jr nc, Saucer_Deactivate        ; Past boundary, remove
+    jr Saucer_CheckCollision
+    
+Saucer_CheckLeft:
+    ; Moving left - check left boundary (with underflow)
+    ld a, (SAUCER_X)
+    cp SAUCER_MIN_X + 16            ; Add margin for signed comparison
+    jp c, Saucer_Deactivate         ; Past boundary, remove
+    
+Saucer_CheckCollision:
+    ; Check for player shot collision
+    call Saucer_CheckHit
+    jr c, Saucer_WasHit             ; Carry set = hit
+    
+    ; Draw saucer at new position
+    call Saucer_Draw
+    ret
+
+Saucer_WasHit:
+    ; Saucer was hit, start explosion sequence
+    ld a, 2                         ; State = 2 (hit)
+    ld (SAUCER_STATE), a
+    
+    ld a, SAUCER_HIT_DURATION       ; Initialize timer
+    ld (SAUCER_HIT_TIMER), a
+    
+    ; Get score from table
+    call Saucer_GetScore
+    
+    ; TODO: Turn off saucer sound, start explosion sound
+    
+    ret
+
+; -------------------------------------------------------------------
+; Saucer_Deactivate
+; -------------------------------------------------------------------
+; Remove saucer from play (reached boundary without being hit)
+; Inputs: None
+; Outputs: None
+; Destroys: AF
+Saucer_Deactivate:
+    call Saucer_Erase
+    
+    xor a
+    ld (SAUCER_STATE), a            ; State = 0 (inactive)
+    
+    ; TODO: Turn off saucer sound
+    
+    ret
+
+; -------------------------------------------------------------------
+; Hit state: Display explosion, show score, deactivate
+; -------------------------------------------------------------------
+Saucer_Update_Hit:
+    ; Decrement hit timer
+    ld a, (SAUCER_HIT_TIMER)
+    dec a
+    ld (SAUCER_HIT_TIMER), a
+    
+    ; Check if timer just started (first frame)
+    cp SAUCER_HIT_DURATION - 1
+    jr z, Saucer_ShowExplosion
+    
+    ; Check if time to show score
+    cp SAUCER_SCORE_DISPLAY_FRAME
+    jr z, Saucer_ShowScore
+    
+    ; Check if timer expired
+    or a
+    jr z, Saucer_FinishExplosion
+    
+    ret
+
+Saucer_ShowExplosion:
+    ; Draw explosion sprite
+    call Saucer_DrawExplosion
+    ret
+
+Saucer_ShowScore:
+    ; Erase explosion, draw score value
+    call Saucer_Erase
+    call Saucer_DrawScore
+    
+    ; Add score to player's total
+    call Saucer_AddScore
+    ret
+
+Saucer_FinishExplosion:
+    ; Clean up and deactivate
+    call Saucer_Erase
+    
+    xor a
+    ld (SAUCER_STATE), a            ; State = 0 (inactive)
+    
+    ; TODO: Turn off explosion sound
+    
+    ret
+
+; ===================================================================
+; Saucer_CheckHit
+; ===================================================================
+; Check if player shot has hit the saucer
+; Inputs: None
+; Outputs: Carry flag set if hit, clear if no hit
+; Destroys: AF, BC, HL
+Saucer_CheckHit:
+    ; Check if player shot is active
+    ld a, (SHOT_LIST_BASE + SHOT_ACTIVE)
+    or a
+    jr z, Saucer_NoHit              ; No active shot
+    
+    ; Get shot position
+    ld a, (SHOT_LIST_BASE + SHOT_X)
+    ld b, a                         ; B = shot X
+    ld a, (SHOT_LIST_BASE + SHOT_Y)
+    ld c, a                         ; C = shot Y
+    
+    ; Get saucer position
+    ld a, (SAUCER_X)
+    ld h, a                         ; H = saucer X
+    ld a, (SAUCER_Y)
+    ld l, a                         ; L = saucer Y
+    
+    ; Check Y overlap: shot Y must be in range [saucer Y, saucer Y + height]
+    ld a, c                         ; A = shot Y
+    sub l                           ; A = shot Y - saucer Y
+    jr c, Saucer_NoHit              ; Shot above saucer
+    cp SAUCER_HEIGHT + SHOT_HEIGHT
+    jr nc, Saucer_NoHit             ; Shot below saucer
+    
+    ; Check X overlap: shot X must be in range [saucer X, saucer X + width]
+    ld a, b                         ; A = shot X
+    sub h                           ; A = shot X - saucer X
+    jr c, Saucer_NoHit              ; Shot left of saucer
+    cp SAUCER_WIDTH + SHOT_WIDTH
+    jr nc, Saucer_NoHit             ; Shot right of saucer
+    
+    ; Hit detected! Deactivate shot
+    xor a
+    ld (SHOT_LIST_BASE + SHOT_ACTIVE), a
+    
+    ; Set carry flag to indicate hit
+    scf
+    ret
+
+Saucer_NoHit:
+    ; Clear carry flag to indicate no hit
+    or a                            ; Clear carry
+    ret
+
+; ===================================================================
+; Saucer_GetScore
+; ===================================================================
+; Get score value from table and advance pointer
+; Inputs: None
+; Outputs: A = score value (50, 100, 150, or 300)
+; Destroys: AF, HL
+Saucer_GetScore:
+    ; Get pointer to score table
+    ld hl, (SAUCER_SCORE_PTR_LSB)
+    
+    ; Read score value
+    ld a, (hl)
+    ld (SAUCER_SCORE_VALUE), a
+    
+    ; Advance pointer
+    inc hl
+    
+    ; Check if past end of table (wrap around)
+    ld a, h
+    cp HIGH(SaucerScoreTable + 16)
+    jr nz, Saucer_GetScore_NoWrap
+    
+    ld a, l
+    cp LOW(SaucerScoreTable + 16)
+    jr nz, Saucer_GetScore_NoWrap
+    
+    ; Wrap to beginning
+    ld hl, SaucerScoreTable
+    
+Saucer_GetScore_NoWrap:
+    ; Store updated pointer
+    ld (SAUCER_SCORE_PTR_LSB), hl
+    
+    ld a, (SAUCER_SCORE_VALUE)
+    ret
+
+; ===================================================================
+; Saucer_AddScore
+; ===================================================================
+; Add saucer score to player's total
+; Inputs: None (reads from SAUCER_SCORE_VALUE)
+; Outputs: None
+; Destroys: AF, BC, DE, HL
+Saucer_AddScore:
+    ; Get score value
+    ld a, (SAUCER_SCORE_VALUE)
+    
+    ; Convert to 16-bit (scores are 50, 100, 150, 300)
+    ; Values in table are already multiplied by 10 for BCD
+    ; 05 = 50, 10 = 100, 15 = 150, 30 = 300
+    ld l, a
+    ld h, 0
+    
+    ; Multiply by 10 to get actual score
+    ; HL = HL * 10
+    push hl                         ; Save HL
+    add hl, hl                      ; HL * 2
+    add hl, hl                      ; HL * 4
+    ld d, h
+    ld e, l                         ; DE = HL * 4
+    add hl, hl                      ; HL * 8
+    add hl, de                      ; HL = HL * 8 + HL * 4 = HL * 10
+    pop de                          ; Restore original to DE
+    ; Now HL has score * 10
+    
+    ; Add to player score (simple 16-bit add for now)
+    ld de, (STATE_SCORE)
+    add hl, de
+    ld (STATE_SCORE), hl
+    
+    ; TODO: Handle BCD conversion and overflow
+    
+    ret
+
+; ===================================================================
+; Saucer_Draw
+; ===================================================================
+; Draw saucer sprite at current position
+; Inputs: None (reads SAUCER_X, SAUCER_Y)
+; Outputs: None
+; Destroys: AF, BC, DE, HL
+Saucer_Draw:
+    ; Only draw if saucer is active
+    ld a, (SAUCER_STATE)
+    or a                            ; State = 0 (inactive)?
+    ret z                           ; Yes, don't draw
+    
+    ; Get position and calculate screen address
+    ld a, (SAUCER_X)                ; A = X coordinate
+    ld b, a
+    ld a, (SAUCER_Y)
+    ld c, a                         ; C = Y coordinate
+    ld a, b
+    call Video_CalcAddress          ; Returns HL = screen address
+    
+    ; Draw sprite
+    ld de, SaucerSprite
+    ld b, SAUCER_HEIGHT             ; 8 rows
+    call DrawSimpleSprite           ; Assumes this routine exists
+
+    ret
+
+; ===================================================================
+; Saucer_Erase
+; ===================================================================
+; Erase saucer sprite at previous position
+; Inputs: None (reads SAUCER_PREV_X, SAUCER_Y)
+; Outputs: None
+; Destroys: AF, BC, HL
+Saucer_Erase:
+    ; Only erase if saucer is active
+    ld a, (SAUCER_STATE)
+    or a                            ; State = 0 (inactive)?
+    ret z                           ; Yes, don't erase
+    
+    ; Get previous position and calculate screen address
+    ld a, (SAUCER_PREV_X)           ; A = X coordinate
+    ld b, a
+    ld a, (SAUCER_Y)
+    ld c, a                         ; C = Y coordinate
+    ld a, b
+    call Video_CalcAddress          ; Returns HL = screen address
+    
+    ; Clear sprite area (8 rows, 2 bytes wide)
+    ld b, SAUCER_HEIGHT
+Saucer_Erase_Loop:
+    xor a
+    ld (hl), a                      ; Clear first byte
+    inc hl
+    ld (hl), a                      ; Clear second byte
+    dec hl
+    
+    ; Move to next row (inc h works for 8 consecutive rows)
+    inc h
+    
+    djnz Saucer_Erase_Loop
+
+    ret
+
+; ===================================================================
+; Saucer_DrawExplosion
+; ===================================================================
+; Draw explosion sprite
+; Inputs: None (reads SAUCER_X, SAUCER_Y)
+; Outputs: None
+; Destroys: AF, BC, DE, HL
+Saucer_DrawExplosion:
+    ; Get position and calculate screen address
+    ld a, (SAUCER_X)                ; A = X coordinate
+    ld b, a
+    ld a, (SAUCER_Y)
+    ld c, a                         ; C = Y coordinate
+    ld a, b
+    call Video_CalcAddress          ; Returns HL = screen address
+    
+    ; Draw explosion sprite
+    ld de, SaucerExplosionSprite
+    ld b, SAUCER_HEIGHT
+    call DrawSimpleSprite
+    
+    ret
+
+; ===================================================================
+; Saucer_DrawScore
+; ===================================================================
+; Draw score value at saucer position
+; Inputs: None (reads SAUCER_SCORE_VALUE, SAUCER_X, SAUCER_Y)
+; Outputs: None
+; Destroys: AF, BC, DE, HL
+Saucer_DrawScore:
+    ; TODO: Implement score text rendering
+    ; For now, just keep area clear or redraw explosion
+    ; This would use a font rendering system to draw "50", "100", etc.
+    ret
+
+; ===================================================================
+; DrawSimpleSprite
+; ===================================================================
+; Draw a simple 16-pixel wide sprite (2 bytes per row)
+; Inputs:
+;   HL = screen address
+;   DE = sprite data pointer
+;   B = number of rows
+; Outputs: None
+; Destroys: AF, BC, DE, HL
+DrawSimpleSprite:
+    ld a, (de)                      ; Get first byte
+    ld (hl), a                      ; Write to screen
+    inc hl
+    inc de
+    ld a, (de)                      ; Get second byte
+    ld (hl), a                      ; Write to screen
+    dec hl                          ; Back to first column
+    inc de
+    
+    ; Move to next screen row (inc h works for 8 consecutive rows)
+    inc h
+    
+    djnz DrawSimpleSprite
+    ret
+
+; ===================================================================
+; Sprite Data
+; ===================================================================
+
+; Saucer sprite (16x8 pixels, rotated for ZX Spectrum)
+; Converted from 8080 data at 1D64
+SaucerSprite:
+    defb 0x00, 0x00     ; Row 0: ................
+    defb 0x3C, 0x00     ; Row 1: ..****..........
+    defb 0x7E, 0x00     ; Row 2: .*******.........
+    defb 0xFF, 0x00     ; Row 3: ********........
+    defb 0xFF, 0x00     ; Row 4: ********........
+    defb 0x7E, 0x00     ; Row 5: .******.........
+    defb 0x3C, 0x00     ; Row 6: ..****..........
+    defb 0x00, 0x00     ; Row 7: ................
+
+; Saucer explosion sprite (16x8 pixels)
+; Converted from 8080 data at 1D7C
+SaucerExplosionSprite:
+    defb 0x00, 0x00     ; Row 0: ................
+    defb 0x22, 0x00     ; Row 1: ..*...*.........
+    defb 0xA5, 0x00     ; Row 2: *.*..*.*.......
+    defb 0x40, 0x08     ; Row 3: .*........*....
+    defb 0x98, 0x3D     ; Row 4: *..**....****.*..
+    defb 0xB6, 0x3C     ; Row 5: *.**.**..****.....
+    defb 0x36, 0x1D     ; Row 6: ..**.**..***.*.....
+    defb 0x10, 0x48     ; Row 7: ...*......*..*.....
+
+; Saucer score table (16 entries)
+; Values: 05=50pts, 10=100pts, 15=150pts, 30=300pts
+; From 8080 source at 1D54
+SaucerScoreTable:
+    defb 10, 05, 05, 10, 15, 10, 10, 05
+    defb 30, 10, 10, 10, 05, 15, 10, 05
+    ; Pattern: one 300 appears every 15 shots (8th position, then repeats)

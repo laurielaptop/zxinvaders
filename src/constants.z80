@@ -100,3 +100,65 @@ ENEMY_SHOT_FIRE_DELAY: equ 60  ; Frames between fire attempts
 
 ; Enemy shot column-firing system
 ENEMY_SHOT_TABLE_PTR: equ GAME_RAM_BASE + 129  ; 2 bytes: pointer into firing table
+
+; ===== Shields (Protective Bases) =====
+SHIELD_COUNT: equ 4
+SHIELD_ROWS: equ 22
+SHIELD_COLS: equ 2
+SHIELD_HEIGHT: equ 16      ; Visual representation on ZX
+SHIELD_WIDTH: equ 16       ; Visual representation on ZX
+SHIELD_SPACING: equ 48     ; Horizontal spacing between shield centers (16 shield + 32 gap)
+SHIELD_DAMAGE_STAGES: equ 4 ; 0=intact, 1=1bite, 2=2bites, 3=destroyed
+SHIELD_BASE_Y: equ 144     ; Y position (above player, below aliens)
+SHIELD_BASE_X: equ 32      ; Start X position
+
+; Shield state: one byte per shield (damage level, 0..3)
+SHIELD_STATE: equ GAME_RAM_BASE + 165
+
+; ===== Player Lives and Hit Detection =====
+PLAYER_LIVES_START: equ 3
+; Player status byte offsets within player object at GAME_RAM_BASE + PLAYER_OBJ_OFFSET
+; Note: PLAYER_STATUS above at +2 is used for collision/animation state
+PLAYER_BLOWUP_DELAY: equ GAME_RAM_BASE + 170   ; Timer (reload=5)
+PLAYER_BLOWUP_FRAMES: equ GAME_RAM_BASE + 171  ; Sprite toggles left
+PLAYER_LIVES_REMAINING: equ GAME_RAM_BASE + 172 ; Current lives
+PLAYER_HIT_FLAG: equ GAME_RAM_BASE + 173       ; 1 = hit this frame
+
+; Game-over state
+GAME_OVER_TIMER: equ GAME_RAM_BASE + 174       ; Countdown timer for game-over screen
+; ===== Alien Explosion =====
+ALIEN_EXPLODING: equ GAME_RAM_BASE + 186         ; 0xFF=no explosion, 0=exploding
+ALIEN_EXPLOSION_DELAY: equ GAME_RAM_BASE + 187   ; Timer (reload=16, arcade authentic)
+ALIEN_EXPLOSION_X: equ GAME_RAM_BASE + 188       ; X position of exploding alien
+ALIEN_EXPLOSION_Y: equ GAME_RAM_BASE + 189       ; Y position of exploding alien
+ALIEN_EXPLOSION_INDEX: equ GAME_RAM_BASE + 190   ; Alien grid index to mark dead when done
+
+
+; ===== Saucer (Mystery Ship / UFO) =====
+SAUCER_STATE: equ GAME_RAM_BASE + 175          ; 0=inactive, 1=flying, 2=hit
+SAUCER_TIMER_LSB: equ GAME_RAM_BASE + 176      ; 16-bit countdown to next saucer
+SAUCER_TIMER_MSB: equ GAME_RAM_BASE + 177      ;   (reload value set by SAUCER_INIT_DELAY)
+SAUCER_HIT_TIMER: equ GAME_RAM_BASE + 178      ; Explosion sequence timer
+SAUCER_X: equ GAME_RAM_BASE + 179              ; X coordinate (0-255)
+SAUCER_Y: equ GAME_RAM_BASE + 180              ; Y coordinate (always 16)
+SAUCER_DX: equ GAME_RAM_BASE + 181             ; Movement delta (+1 right, -1 left)
+SAUCER_SCORE_PTR_LSB: equ GAME_RAM_BASE + 182  ; Pointer into score table
+SAUCER_SCORE_PTR_MSB: equ GAME_RAM_BASE + 183  ; MSB of score table pointer
+SAUCER_PREV_X: equ GAME_RAM_BASE + 184         ; Previous X for sprite erase
+SAUCER_SCORE_VALUE: equ GAME_RAM_BASE + 185    ; Score awarded (50/100/150/300)
+
+; Saucer timing constants
+SAUCER_INIT_DELAY: equ 256                     ; Tuned for quicker, reliable appearance
+SAUCER_MIN_ALIENS: equ 8                       ; Minimum aliens before saucer appears
+SAUCER_HIT_DURATION: equ 32                    ; Frames to show explosion/score
+SAUCER_SCORE_DISPLAY_FRAME: equ 24             ; Frame to display score (32-8)
+
+; Saucer sprite dimensions  
+SAUCER_WIDTH: equ 16                           ; 16 pixels wide
+SAUCER_HEIGHT: equ 8                           ; 8 pixels tall (simplified from 24)
+SAUCER_Y_POS: equ 16                           ; Fixed Y position at top
+
+; Saucer movement
+SAUCER_SPEED: equ 1                            ; Pixels per frame
+SAUCER_MIN_X: equ 0                            ; Left boundary
+SAUCER_MAX_X: equ 240                          ; Right boundary (256 - 16)

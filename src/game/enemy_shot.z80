@@ -33,7 +33,6 @@ EnemyShot_TryFire:
     ld hl, ENEMY_SHOT_COUNTER
     inc (hl)
     ld a, (hl)
-    call Debug_ShowFireCounter   ; DEBUG: Show counter is incrementing
     cp ENEMY_SHOT_FIRE_DELAY
     ret c                        ; Not time yet
     ld (hl), 0                   ; Reset counter
@@ -282,6 +281,14 @@ EnemyShot_CheckLoop:
     pop bc
     pop hl
     
+    ; Only trigger if player not already exploding
+    push hl
+    ld hl, GAME_RAM_BASE + PLAYER_STATUS
+    ld a, (hl)
+    pop hl
+    cp 0xFF
+    jr nz, EnemyShot_AlreadyExploding  ; Skip if already hit
+    
     ; Deactivate shot and clear PREV_Y marker
     push hl
     ld de, ENEMY_SHOT_ACTIVE
@@ -292,12 +299,20 @@ EnemyShot_CheckLoop:
     ld (hl), a
     pop hl
     
-    ; Decrement player lives
-    ld hl, STATE_LIVES
-    dec (hl)
+    ; Trigger player explosion
+    call PlayerHit_OnHit
+    jr EnemyShot_CheckNext
     
-    ; TODO: Add player explosion/respawn
-    
+EnemyShot_AlreadyExploding:
+    ; Just deactivate the shot without retriggering explosion
+    push hl
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de
+    xor a
+    ld (hl), a
+    dec hl
+    ld (hl), a
+    pop hl
     jr EnemyShot_CheckNext
     
 EnemyShot_NoHit:
@@ -455,3 +470,17 @@ EnemyShot_ColumnTable:
     defb 1, 7, 1, 1, 1, 4, 11, 1, 6, 3
     defb 1, 1, 11, 9, 2, 8
 EnemyShot_ColumnTableEnd:
+
+; EnemyShot_Reset
+; Clear all enemy shots (set to inactive)
+EnemyShot_Reset:
+    ld hl, ENEMY_SHOT_LIST_BASE
+    ld b, MAX_ENEMY_SHOTS
+.reset_loop:
+    ld bc, ENEMY_SHOT_ACTIVE
+    add hl, bc              ; Point to ACTIVE byte
+    ld (hl), 0              ; Set to inactive
+    ld de, ENEMY_SHOT_OBJ_SIZE
+    add hl, de              ; Move to next shot
+    djnz .reset_loop
+    ret

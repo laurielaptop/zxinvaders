@@ -1,0 +1,706 @@
+Sprite Graphics Tutorial
+Arjun October 2, 2013
+Home > Z80 Assembly > Sprite Graphics Tutorial
+This tutorial is by Derek M. Smith © 2005.
+Sprite graphics are the backbone of arcade games. Put
+simply, a sprite is a moveable screen object, such as a
+spaceship, alien, or anything else you can imagine. Some
+computers come with built in sprites, such as the
+Commodore and Atari ranges. These machines could
+generate sprites without the need for complex
+programming, and on top of this, they used an additional
+processor, which left the main CPU free to get on with the
+rest of the program. The Spectrum sadly was never
+adorned with such luxuries and so programmers had to
+write their own sprite routines from scratch (a daunting
+task for the amateur).
+Sloppy programming in this area could really spoil a game,
+either making it too slow, or through flickering graphics.
+A simple sprite routine is often one of the first things a
+new programmer, after having mastered the basics of
+machine code, will have a go at.
+At first it seems straight forward, but soon all sorts of
+hurdles appear. The first usually being the Spectrum’s
+unusual screen arrangement. More experienced
+programmers who have mastered the basic sprite
+handling routine will then seek ways to optimise it.
+This tutorial is aimed at both beginners and the more
+experienced programmers. Beginners will learn the
+principles behind sprite programming and the
+experienced machine coders will learn to find ways of
+improving their routines. For simplicity, this tutorial
+assumes that the reader has a decent grasp of assembly
+language.
+ZX Spectrum screen arrangement
+“The display file stores the television picture. It is rather
+curiously laid out…” -Spectrum Manual ch24 p164
+On the face of it the Spectrum’s screen arrangement is
+pretty strange. Just watch the screen of a game loading,
+and you’ll understand what I mean. Why does it skip lines
+like that? Sure it may be interesting to watch the picture
+being gradually built up, but it can be a real pain when it
+comes to writing a sprite routine (at least until you
+understand the principles behind its layout).
+First off, the Spectrum screen has a resolution of 256
+pixels across by 192 down, not including the border
+around it. It can display 8 colours (including black and
+white) with two levels of intensity (brightness).
+The Memory Map for the screen starts at address 16384
+and is 6912 bytes long.
+It is split in to two halves with the first 6144 bytes
+containing the bit-map (or pixel map, if you wish) and the
+remaining 768 bytes containing the attribute-map.
+Consider the bit-map first:-
+Each line of 256 pixels is stored as 32 bytes: 32 x 8 = 256.
+So far so good.
+Now you would think that each line would follow on from
+the one before in the pixel map, and most people (myself
+included) write their first sprite routine thinking this to be
+the case – only to find that when they execute the routine,
+with a shudder of anticipation, their sprite is spread all
+over the screen. At this point some give up (or decide to
+write adventure games instead) baffled by the Spectrum’s
+idiosyncrasies.
+Let me say now that when you do grasp the screen layout
+and the techniques used for addressing it, I think you will
+be glad that the designers done it that way.
+Type in the following and run it:
+10 FOR S = 16384 TO 22527
+20 POKE S, 255
+30 NEXT S
+This short BASIC program fills the screen. Although it is
+moving through memory sequentially, POKING 255 into
+each memory location, the screen fills up in a rather more
+esoteric manner. Run the program a few times and watch
+the pattern it traces. You’ll notice two things: One is the
+way it skips lines, another is that the screen is divided into
+three parts.
+I said earlier that each line is stored as 32 bytes, with the
+first line beginning at 16384. Where does the second line
+start? Most of us assume it would start at 16384+32. In
+fact it starts at 16384+256 and 16384+32 takes us down
+to line 8. Remember that the screen is used to display text
+(characters) as well as graphics. So adding 32 actually
+takes us down one character row (8 screen lines).
+In machine code 16bit addresses, such as 16384, are
+stored in high byte / low byte format. The high byte is
+equal to ADDRESS / 256 and the low byte is the remainder
+from the division, so 16384 in high/low byte format would
+be 64, 0 (16384 / 256 = 64 with no remainder). This
+means that when we increase the high byte of a 16 bit
+address by one, it is equivalent to adding 256. So when it
+comes to screen addressing all we need to do to move
+down a line is increase the high byte of the address. This
+can be done quite easily and quickly in machine code:
+ld hl,16384 inc h ;load the hl register pair wi
+;increment the high byte (4 t
+This is in fact much quicker than adding 32 where we
+would have to do the following:
+ld hl,16384
+ld a,l add a,32 ;add 32
+ld l,a ;load the accumulator with th
+;directly to the l register
+;load the result back into th
+The above works within a group of 8 lines, ie. 1 char line.
+Now, as mentioned before, the other peculiar thing about
+the screen layout is that it is divided in to three parts –
+top, middle and bottom. Each third of the screen has 64
+lines (or 8 character rows) and takes up 2048 bytes of
+memory. All that has been said so far applies only so long
+as we don’t cross from one third into another.
+The whole matter becomes at good deal clearer if we look
+at the screen address in binary.
+High Byte | L
+0 1 0 T T L L L Cr Cr Cr Cc Cc
+I have used some abbreviations to make things a bit
+clearer:
+T – these two bits refer to which third of the screen is
+being addressed: 00 – Top, 01 – Middle, 10 – Bottom
+L – these three bits indicate which line is being addressed:
+from 0 – 7, or 000 – 111 in binary
+Cr – these three bits indicate which character row is being
+addressed: from 0 – 7
+Cc – these five bits refer to which character column is
+being addressed: from 0 – 31
+The top three bits ( 010 ) of the high byte don’t change.
+Calculating the screen address
+The first task in putting a sprite on the screen is to
+translate the X,Y coords into a screen address.
+There are two ways of doing this. One is to set up a look-
+up table which contains 192 addresses corresponding to
+each screen line. The other way is a bit more interesting
+and involves distilling the appropriate line, column and row
+bits that make up the address from the X and Y coords.
+Lets examine this way first.
+Taking the Y coord first: This will be in the range 0 – 191,
+with 0 corresponding to the top of the screen. The lowest
+three bits indicate which line (within a character row) 0 – 7
+we are dealing with. This is the same as the high byte of
+the screen address. The top two bits refer to which third
+of the screen we are dealing with:
+Y Coord
+T T - - - L L L
+Let us assume that the B & C registers contain our X & Y
+coords. First we need to isolate the lowest three bits of
+the Y coord (C reg.), as follows:
+ld a,c
+and %00000111 ;% indicates that the
+We will use the HL register pair for the screen address. So
+next we transfer these three bits to the high byte (H reg.)
+ld h,a
+In order to get the top two bits into the correct position we
+must shift them right three times, as follows:
+ld a,c
+rra
+rra ;rotate right accumul
+rra
+This shifts all the bits to the right three times, with the
+highest bit being reset after each shift. All that’s left to do
+at this stage is to clear the bits we don’t need, as follows:
+and %00011000
+This must now be ORd with the H register.
+or h
+Then the top three bits, which remain constant, are set as
+appropriate:
+or %01000000
+ld h,a ;load the result back
+So now we have the high byte of the screen address.
+The low byte of the address is composed of the following
+bits of both the X and Y coords:
+X Coord |
+Cc Cc Cc Cc Cc - - - - - Cr Cr Cr
+Low Byte
+Cr Cr Cr Cc Cc Cc Cc Cc
+The character column bits need to be shifted to the right
+three times.
+ld a,b rra
+rra
+rra
+and %00011111 ;B reg. holds the X c
+; ensure the top 3 bi
+ld l,a
+Then the character row bits must be shifted left twice so
+that they correspond to the highest three bits of the low
+byte of the address (see earlier).
+ld a,c ;C reg. holds the Y c
+rla ;rotate left accumula
+rla
+and %11100000 ;isolate the characte
+or l ;OR the result with t
+ld l,a ;and place in L regis
+Right, that’s the difficult part done. We now have the
+screen address in HL. All that is left is to get the pixel
+position (0 – 7 from left to right) from the X coord (lowest
+three bits).
+ld a,b
+and %00000111
+So the complete routine is as follows:
+On Entry: B reg = X coord, C reg = Y coord
+On Exit: HL = screen address, A = pixel position
+; Calculate the high byte of the screen addressand st
+ld a,c
+and %00000111
+ld h,a
+ld a,c
+rra
+rra
+rra
+and %00011000
+or h
+or %01000000
+ld h,a
+; Calculate the low byte of the screen address and st
+ld a,b
+rra
+rra
+rra
+and %00011111
+ld l,a
+ld a,c
+rla
+rla
+and %11100000
+or l
+ld l,a
+; Calculate pixel postion and store in A reg.
+ld a,b
+and %00000111
+Using a Look-up Table
+The other method of calculating the screen address is to
+use a table of pre-calculated addresses, and then use the
+Y coord to pick out the right one. This is a good deal
+quicker than the above method, albeit at the cost of 384
+bytes of memory for the table. The look-up table contains
+the address of each line in the display file, 192 lines.
+Routine to generate a Screen Address Table:
+scradtab equ 64000
+gentab ld de,16384
+ld hl,scradtab
+ld b,192
+lineloop ld (hl),e
+inc l
+ld (hl),d
+inc hl
+inc d
+ld a,d
+and 7
+jr nz,nextline
+ld a,e
+add a,32
+ld e,a
+jr c,nextline
+ld a,d
+sub 8
+ld d,a
+nextline djnz lineloop
+ret
+Assuming again that on entry the B and C registers
+contain our X & Y coords.
+ld de,scradtab ld l,c ld h,0
+add hl,hl add hl,de ;address of look-up t
+;Y coord in L registe
+ld a,(hl) ;multiply by two, as
+;add to the start add
+;appropriate point in
+;get low byte of scre
+;so as not to corrupt
+inc l
+ld l,a ld h,(hl) ;get high byte
+;HL now contains the
+ld a,b ;calculate character
+and %11111000 ;isolate appropriate
+rrca ;rotate right circula
+rrca
+add a,l ld l,a rrca ;shifting three times
+;add to low byte of a
+;put result back in L
+On exit HL will contain the screen address.
+An even quicker way is to arrange the lookup table so that
+it is aligned with a 256 byte page boundary. This method
+separates the low byte and the high byte of the screen
+addresses, so in effect there are two tables one
+containing the low bytes of the address of each screen
+line and one containing the high bytes. Each must be
+aligned with a page boundary, ie. the start address of the
+table must be cleanly divisible by 256.
+The above routine for generating the screen address table
+needs the following changes made to it:
+lineloop ld (hl),e
+inc h
+ld (hl),d
+dec h
+inc l
+The table would be filled as follows:
+64000 - 64191 0....... 32....... 64
+64256 - 64447 64,65,66....71, 64,65
+Finding the start address of a particular line is then done
+as follows:
+ld h,scradtab/256 ld l,c ld a,(hl) inc h ld l,a ; high byte of start
+; C reg. contains the
+; already we have fou
+; increasing high byt
+ld h,(hl) ; corresponding high
+; HL now contains the
+All that is then needed is to add on the column position,
+which is calculated in the same way as the previous
+routine.
+Basic considerations
+The main factors which need consideration when writing a
+sprite routine are:
+1. Whether or not to use masked sprites
+2. Whether or not to use pre-shifted sprites
+3. What sizes of sprite to use and whether to use a
+different routine tailored for each size or a generic
+routine which will produce various sizes of sprite
+Writing a generic sprite routine which can handle many
+sizes and types of sprite, is generally shunned by most
+programmers, because the complexity of the routine has a
+negative impact on performance. It is perferable to write
+several routines tailored to specific sizes of sprite.
+As per usual there is a trade-off between memory and
+speed, with the fastest routines using the most memory.
+Masked sprites on average will take about 30% more time
+to process.
+Pre-shifted sprites, which are sprites stored in 2, 4 or 8
+different pixel positions, are by far the fastest type, but
+consume lots of memory.
+An alternative to using pre-shifted sprites favored by
+some programmers, is to have a look-up table containing
+each bit pattern from 0 – 255 shifted into eight positions.
+In practice this takes up 4K of memory but this is usually
+less than is required when pre-shifting a large number of
+sprites. More about this later.
+A Worked Example
+It’s now time to take a look at how to code a basic sprite
+routine. The example below is for an 8 x 8 non-masked
+sprite. The sprite data (a small arrow pointer) is located at
+USR “A” – 65368. The routine shifts the data in real time.
+The sprite is XORed with the contents of the screen. You
+could also OR the sprite with the screen contents (see
+below for explanation of OR, XOR etc.) Real time rotation
+of sprite data is easiest acheived with small sprites (16
+pixels or less wide), as the data can be stored in registers
+while being rotated.
+The steps in the algorithm to draw the sprite could be
+stated as follows:
+1. Retrieve X and Y coords.
+2. Calculate Screen Address based on X,Y coords, using a
+look-up table
+3. Calculate Bit Position from X coord (X coord AND 7 =
+bit position)
+4. Retrieve a line of the sprite graphics data
+5. Check if Bit Position is zero
+6. If so there is no need to shift the sprite data, so skip the
+code which shifts the data (jump to step 8 )
+7. Shift the sprite data according to its bit position
+8. Put the line of sprite data on the screen
+9. Adjust screen address for next line
+10. Perform steps 4-9 until all lines have been drawn
+ORG 50000
+SPRITE DI ;Disable Interupts. N
+;example as w
+LD BC,(XPOS) ; First off,
+; and place t
+LD H,SCRADTAB/256 ; this next s
+LD L,B ; screen addr
+LD A,(HL) ; as explaine
+INC H
+LD H,(HL)
+LD L,A
+LD A,C
+AND 248
+RRCA
+RRCA
+RRCA
+ADD A,L
+LD L,A
+LD (SCRADD),HL ; store screen addres
+; as HL is ne
+LD A,C ; find which
+AND 7 LD (BITPOS),A ; will be at
+; know how ma
+LD HL,SPRGFX ; start address for t
+LD C,8 ; The sprite
+LINELOOP LD E,(HL) ; load the E
+INC L ; sprite data
+PUSH HL ; preserve this addre
+LD A,(BITPOS) ; Retrieve th
+OR A ; Quick way o
+JR Z,SKIPROTATE ; If zero then no shi
+LD B,A ; loop counte
+; rotate (shi
+XOR A ; Quick way s
+; clearing th
+; as the rota
+; into the sp
+ROTATELOOP RR E ; An extra re
+RRA ; shifted spr
+; rightmost b
+; It is then
+DJNZ ROTATELOOP ; Loop back until shi
+SKIPROTATE LD D,A ; Store in D
+; needed for
+; shifted spr
+LD HL,(SCRADD) ; Get back the screen
+LD A,(HL) ; Actually pu
+XOR E
+LD (HL),A
+INC L
+LD A,(HL)
+XOR D
+LD (HL),A
+DEC L INC H
+; move back a
+LD A,H ; It is not n
+AND 7 ; the screen
+JR NZ,A1 ; the sprite.
+LD A,L ; check if a
+ADD A,32 ; has been cr
+LD L,A ; accordingly
+JR C,A1
+LD A,H
+SUB 8
+LD H,A
+A1 LD (SCRADD),HL ; store it again
+POP HL ; retrieve the addres
+; of sprite d
+DEC C
+JP NZ,LINELOOP ; loop back until all
+EI ; Enable Inte
+RET
+XPOS DEFB 0
+YPOS DEFB 0
+SCRADD DEFW 0
+BITPOS DEFB 0
+SCRADTAB EQU 64000
+On Exit : A, BC, DE, HL corrupt
+As can be seen from the above routine it is not necessary
+to re-calculate the screen address for every line of a
+sprite. A couple of checks can be made to test if the next
+line to be drawn is in a new character row or screen third
+and adjust the address accordingly:
+LD A,H ;HL contains
+AND 7
+JR NZ, REST_OF_PROGRAM
+LD A,L
+ADD A,32
+LD L,A
+JR C, REST_OF PROGRAM
+LD A,H
+SUB 8
+LD H,A
+Rest Of Program continues here...
+Routine to generate a table of screen addresses
+GENTAB LD DE,16384
+LD HL,SCRADTAB
+LD B,192
+LINELOOP LD (HL),E
+INC H
+LD (HL),D
+DEC H
+INC L
+INC D
+LD A,D
+AND 7
+JR NZ,NEXTLINE
+LD A,E
+ADD A,32
+LD E,A
+JR C,NEXTLINE
+LD A,D
+SUB 8
+LD D,A
+NEXTLINE DJNZ LINELOOP
+RET
+Sprite Graphics Data
+ORG 65368
+SPRGFX DEFB %00000000
+DEFB %01111000
+DEFB %01110000
+DEFB %01111000
+DEFB %01011100
+DEFB %00001110
+DEFB %00000100
+DEFB %00000000
+OR, XOR, AND
+00111100 OR 00011000 = 00111100
+00111100 XOR 00011000 = 00100100
+00111100 AND 00011000 = 00011000
+Masked Sprites
+Masking is a technique used to blank out the area behind
+a sprite before drawing the sprite to the display. It’s slower
+than planar (non-masked) sprites, and uses twice as
+much memory but the final result is more pleasing to the
+eye. If your sprites are going to be moving over a
+patterned background its the best technique to use.
+The way to draw a masked sprite is to AND the mask with
+background and then OR the actual sprite with the result.
+When you AND two bitmaps, bits in the BACKGROUND
+are reset by zeros in the MASK, and left as they are by
+ones. That’s probably not very easy to grasp so look at
+the following examples:
+background mask
+00111100 and 11111111 = 00111100
+00111100 and 00000000 = 00000000
+11111111 and 00111100 = 00111100
+The previous example showed how to code a very simple
+sprite routine. Lets now look at a more complex example.
+This routine will draw a 16 x 16 Masked Sprite, storing the
+background underneath in a buffer.
+This is probably the largest size that can be conveniently
+shifted in real-time. Any larger and you will want to use a
+different technique.
+The following routine uses a couple of non-standard
+programming techniques. These tricks help to speed up
+execution but make the code a bit more difficult to follow.
+One technique involves using the Stack to retrieve the
+sprite data, the other is self-modifying code, where the
+program pokes values into instructions that will be
+executed later on in the routine.
+ORG 50000,50000
+SPRITE DI ; Disable Int
+LD (SPTEMP),SP ; Store Stack
+; by
+LD BC,(XPOS)
+LD A,C
+AND 7
+LD (BITPOS),A
+LD H,SCRADTAB/256 ; Cal
+LD L,B
+LD A,(HL)
+INC H
+LD H,(HL)
+LD L,A
+LD A,C
+AND 248
+RRCA
+RRCA
+RRCA
+ADD A,L
+LD L,A
+LD (SCRADD),HL
+LD IX,BKGRNDBUF ; IX is used
+; of
+LD SP,SPRGFX ; start addre
+LD A,16 ; The sprite
+LD (LINECOUNT),A
+LINELOOP POP DE ; Using the s
+POP HL ; E and D wil
+; L a
+LD A,255 ; Whe
+; is
+; ini
+SCF ; The
+; lef
+EX AF,AF' ; We
+; the
+LD A,(BITPOS) ; Ret
+OR A ; Qui
+JR Z,SKIPROTATE ; If zero the
+LD B,A ; loo
+XOR A ; cle
+; as
+; int
+ROTATELOOP EX AF,AF' ; Shi
+RR E
+RR D
+RRA
+EX AF,AF' ; Shi
+RR L
+RR H
+RRA
+DJNZ ROTATELOOP ; Loop back u
+SKIPROTATE LD (DATA+1),A ; Thi
+EX AF,AF' ; As
+LD (MASK+1),A ; fre
+; and
+LD BC,(SCRADD) ; Get back th
+LD A,(BC) ; Act
+LD (IX),A ; Sto
+; wit
+AND E ; Thi
+OR L ; The
+LD (BC),A ; and
+INC C
+INC IXL
+LD A,(BC) ; Put
+LD (IX),A ; As
+AND D ; eac
+OR H
+LD (BC),A
+INC C
+INC IXL
+LD A,(BC) ; Put
+LD (IX),A
+MASK AND 255 ; These are t
+DATA OR 0 ; ear
+; wer
+LD (BC),A
+INC IXL
+DEC C
+INC B
+DEC C ; mov
+LD A,B ; It
+AND 7 ; the
+JR NZ,A1 ; the
+LD A,C ; che
+ADD A,32 ; has
+LD C,A ; acc
+JR C,A1
+LD A,B
+SUB 8
+LD B,A
+A1 LD (SCRADD),BC ; store it ag
+LD HL,LINECOUNT
+DEC (HL)
+JP NZ,LINELOOP ; loop back u
+LD SP,(SPTEMP) ; Restore the
+EI ; Ena
+RET
+In order to clear the sprite we need to copy back to the
+screen the Buffer holding the contents
+of the screen under the sprite. The following routine will
+do this.
+CLEARSPRITE DI
+LD BC,(OLDXPOS)
+LD H,SCRADTAB/256
+LD L,B
+LD A,(HL)
+INC H
+LD H,(HL)
+LD L,A
+LD A,C
+AND 248
+RRCA
+RRCA
+RRCA
+ADD A,L
+LD L,A
+LD DE, BKGRNDBUF
+LD C,16
+CLOOP LD A,(DE)
+LD (HL),A
+INC L
+INC E
+LD A,(DE)
+LD (HL),A
+INC L
+INC E
+LD A,(DE)
+LD (HL),A
+INC E
+DEC L
+DEC L
+INC H
+LD A,H
+AND 7
+JR NZ,A2
+LD A,L
+ADD A,32
+LD L,A
+JR C,A2
+LD A,H
+SUB 8
+LD H,A
+A2 DEC C
+JP NZ,CLOOP
+EI
+RET
+XPOS DEFB 0
+YPOS DEFB 0
+OLDXPOS DEFB 0
+OLDYPOS DEFB 0
+LINECOUNT DEFB 0
+BITPOS DEFB 0
+SCRADD DEFW 0
+SPTEMP DEFW 0
+SCRADTAB EQU 64000
+BKGRNDBUF EQU 64512
+; ASM source file created by SevenuP v1.12
+; SevenuP (C) Copyright 2002-2004 by Jaime Tejedor G¢
+;GRAPHIC DATA:
+;Pixel Size: ( 16, 16)
+;Char Size: ( 2, 2)
+;Sort Priorities: X char, Char line, Y char, Mask
+;Attributes: No attributes
+;Mask: Yes, mask before
+SPRGFX DEFB 248, 31, 0, 0
+DEFB 224, 7, 3,192
+DEFB 192, 3, 15,240
+DEFB 128, 1, 25,248
+DEFB 128, 1, 51,252
+DEFB 0, 0, 39,252
+DEFB 0, 0,111,250
+DEFB 0, 0,127,252
+DEFB 0, 0,127,250
+DEFB 0, 0,127,252
+DEFB 0, 0, 63,248
+DEFB 128, 1, 63,244
+DEFB 128, 1, 31,232
+DEFB 192, 3, 13, 80
+DEFB 224, 7, 2,128
+DEFB 248, 31, 0, 0
+Addendum: There appears to be a minor bug in the
+original code by Derek Smith. Commentator uglifruit
+posted a fix in the comments section, which has now been
+integrated into the above code.

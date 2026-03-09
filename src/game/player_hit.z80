@@ -1,0 +1,233 @@
+; Game/player_hit.z80 - Player hit detection, blowup animation, and lives management
+
+; PlayerHit_Init
+; Initialize player status to normal (not blowing), lives to PLAYER_LIVES_START
+PlayerHit_Init:
+    ld hl, GAME_RAM_BASE + PLAYER_STATUS
+    ld (hl), 0xFF           ; Not blowing up
+    ld hl, PLAYER_BLOWUP_DELAY
+    ld (hl), 0              ; Blowup delay
+    ld hl, PLAYER_BLOWUP_FRAMES
+    ld (hl), 0              ; Blowup frames
+    ld hl, PLAYER_LIVES_REMAINING
+    ld (hl), PLAYER_LIVES_START
+    ret
+
+; PlayerHit_OnHit
+; Called when player is struck by an alien shot or alien
+; Triggers blowup sequence and decrements lives
+PlayerHit_OnHit:
+    ld hl, GAME_RAM_BASE + PLAYER_STATUS
+    ld a, (hl)
+    cp 0xFF
+    ret nz                  ; Already blowing up, ignore
+    
+    ; Start blowup
+    ld (hl), 0              ; Set status to blowing (non-FF)
+    ld hl, PLAYER_BLOWUP_DELAY
+    ld (hl), 5              ; Reload blowup delay to 5 frames
+    ld hl, PLAYER_BLOWUP_FRAMES
+    ld (hl), 6              ; Number of sprite toggles
+    
+    ; Decrement lives
+    ld hl, PLAYER_LIVES_REMAINING
+    dec (hl)
+    ret
+
+; PlayerHit_Update
+; Update blowup animation each frame
+; Returns Z flag if blowup just finished, NZ if still animating
+PlayerHit_Update:
+    ld hl, GAME_RAM_BASE + PLAYER_STATUS
+    ld a, (hl)
+    cp 0xFF
+    ret z                   ; Not blowing, out
+    
+    ; Blowing - update timers
+    ld hl, PLAYER_BLOWUP_DELAY
+    dec (hl)
+    ret nz                  ; Delay not yet reached
+    
+    ; Delay reached - reload and toggle frame
+    ld (hl), 5              ; Reload delay
+    ld hl, PLAYER_BLOWUP_FRAMES
+    dec (hl)
+    ret nz                  ; Still frames left
+    
+    ; Animation complete
+    ld hl, GAME_RAM_BASE + PLAYER_STATUS
+    ld (hl), 0xFF           ; Back to normal status
+    xor a                   ; Set Z flag
+    ret
+
+; PlayerHit_Erase
+; Erase player sprite during blowup animation at player position
+PlayerHit_Erase:
+    ; Check if blowing up
+    ld hl, GAME_RAM_BASE + PLAYER_STATUS
+    ld a, (hl)
+    cp 0xFF
+    ret z                   ; Not blowing, nothing to erase
+    
+    ; Get player position
+    ld hl, GAME_RAM_BASE + PLAYER_X
+    ld a, (hl)              ; A = X
+    ld b, a
+    inc hl
+    ld c, (hl)              ; C = Y
+    
+    ; Calculate screen address
+    call Video_CalcAddress
+    
+    ; Get bit offset
+    ld a, b
+    and 0x07
+    ld c, a
+    
+    ; Erase 8x8 area
+    ld b, 8
+PlayerHit_EraseLoop:
+    ld a, 0
+    ld (hl), a
+    
+    ; If not byte-aligned, clear adjacent byte
+    ld a, c
+    or a
+    jr z, PlayerHit_EraseNext
+    inc l
+    ld a, 0
+    ld (hl), a
+    dec l
+    
+PlayerHit_EraseNext:
+    inc h
+    djnz PlayerHit_EraseLoop
+    ret
+
+; PlayerHit_Draw
+; Draw explosion sprite based on animation frame
+PlayerHit_Draw:
+    ; Check if blowing up
+    ld hl, GAME_RAM_BASE + PLAYER_STATUS
+    ld a, (hl)
+    cp 0xFF
+    ret z                   ; Not blowing, nothing to draw
+    
+    ; Get player position
+    ld hl, GAME_RAM_BASE + PLAYER_X
+    ld a, (hl)              ; A = X
+    ld b, a
+    inc hl
+    ld c, (hl)              ; C = Y
+    
+    ; Calculate screen address
+    call Video_CalcAddress
+    
+    ; Save screen address and bit offset
+    push hl                 ; Save screen address
+    
+    ; Get bit offset
+    ld a, b
+    and 0x07
+    ld c, a                 ; C = bit offset
+    
+    ; Select sprite based on frame counter (toggle between two patterns)
+    ld hl, PLAYER_BLOWUP_FRAMES
+    ld a, (hl)
+    and 1                   ; Test bit 0 for alternating pattern
+    jr z, PlayerHit_DrawFrame1
+    
+    ; Frame 0 - first explosion pattern
+    ld de, PlayerExplosion1
+    jr PlayerHit_DrawSprite
+    
+PlayerHit_DrawFrame1:
+    ; Frame 1 - second explosion pattern
+    ld de, PlayerExplosion2
+    
+PlayerHit_DrawSprite:
+    pop hl                  ; Restore screen address
+    ld b, 8
+PlayerHit_DrawLoop:
+    ld a, (de)              ; Source row bits
+    inc de
+    push de                 ; Preserve sprite pointer
+    
+    ; If byte-aligned, write a single byte
+    ld d, a
+    ld a, c
+    or a
+    jr z, PlayerHit_DrawAligned
+    
+    ; Left byte: source >> offset
+    ld a, d
+    ld e, c
+PlayerHit_ShiftRightLoop:
+    srl a
+    dec e
+    jr nz, PlayerHit_ShiftRightLoop
+    ld (hl), a
+    
+    ; Right byte: source << (8 - offset)
+    ld a, 8
+    sub c
+    ld e, a
+    ld a, d
+PlayerHit_ShiftLeftLoop:
+    sla a
+    dec e
+    jr nz, PlayerHit_ShiftLeftLoop
+    inc l
+    ld (hl), a
+    dec l
+    
+    pop de
+    jr PlayerHit_DrawNext
+    
+PlayerHit_DrawAligned:
+    ld a, d
+    ld (hl), a
+    pop de
+    
+PlayerHit_DrawNext:
+    inc h
+    djnz PlayerHit_DrawLoop
+    ret
+
+; Explosion sprite patterns (8x8 pixels)
+; Frame 1: scattered debris (arcade-style)
+PlayerExplosion1:
+    db 0x91    ; █··█···█
+    db 0x24    ; ··█··█··
+    db 0x42    ; ·█····█·
+    db 0x00    ; ········
+    db 0x18    ; ···██···
+    db 0x24    ; ··█··█··
+    db 0x42    ; ·█····█·
+    db 0x81    ; █······█
+
+; Frame 2: alternate debris pattern
+PlayerExplosion2:
+    db 0x48    ; ·█··█···
+    db 0x12    ; ···█··█·
+    db 0x84    ; █····█··
+    db 0x00    ; ········
+    db 0x3C    ; ··████··
+    db 0x42    ; ·█····█·
+    db 0x24    ; ··█··█··
+    db 0x18    ; ···██···
+
+; PlayerHit_GetLives
+; Return current lives count in A
+PlayerHit_GetLives:
+    ld hl, PLAYER_LIVES_REMAINING
+    ld a, (hl)
+    ret
+
+; PlayerHit_IsAlive
+; Return Z if player currently blowing up, NZ if alive
+PlayerHit_IsAlive:
+    ld hl, GAME_RAM_BASE + PLAYER_STATUS
+    ld a, (hl)
+    cp 0xFF
+    ret

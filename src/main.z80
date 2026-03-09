@@ -14,8 +14,13 @@ include "game/player.z80"
 include "game/shot.z80"
 include "game/enemy_shot.z80"
 include "game/aliens.z80"
+include "game/saucer.z80"
 include "game/debug_overlay.z80"
 include "game/hud.z80"
+include "game/shields.z80"
+include "game/player_hit.z80"
+include "game/alien_hit.z80"
+include "game/game_over.z80"
 include "debug.z80"
 
 START:
@@ -28,6 +33,10 @@ START:
     call Shot_Init
     call EnemyShot_Init
     call Aliens_Init
+    call Shields_Init
+    call Saucer_Init
+    call PlayerHit_Init
+        call AlienHit_Init
     call Debug_Init
 
 MAIN_LOOP:
@@ -36,22 +45,35 @@ MAIN_LOOP:
     call Shot_Erase
     call EnemyShot_Erase
     call Aliens_Erase
+        call AlienHit_Erase
+    call PlayerHit_Erase
+    call Saucer_Erase           ; Erase saucer
+    call Shields_Erase          ; Erase shields before update
     
     ; Update game state
     call Player_Update
     call Shot_Update
     call EnemyShot_Update
+        call AlienHit_Update
+    call PlayerHit_Update          ; Update player blowup animation
+    call Saucer_Update             ; Update saucer (timing, movement, hits)
     call Debug_UpdateShotActive
+    call Debug_UpdatePlayerHit
+    call Aliens_Move
     call Aliens_CheckShotCollision
     call EnemyShot_CheckPlayerCollision
-    call Aliens_Move
     call EnemyShot_TryFire
+    call Debug_ClearShields        ; Clear shields debug indicator
     
     ; Draw new sprites
     call Aliens_Draw
+        call AlienHit_Draw
     call Player_Draw
+    call PlayerHit_Draw     ; Draw player blowup animation if active
     call Shot_Draw
     call EnemyShot_Draw
+    call Saucer_Draw               ; Draw saucer
+    call Shields_Draw           ; Draw shields
     call HUD_Draw
     
     call Timing_WaitShort

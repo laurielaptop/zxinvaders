@@ -225,3 +225,17 @@ Shot_DrawNext:
     add hl, de
     djnz Shot_DrawLoop
     ret
+
+; Shot_Reset
+; Clear all player shots (set to inactive)
+Shot_Reset:
+    ld hl, SHOT_LIST_BASE
+    ld b, MAX_SHOTS
+.reset_loop:
+    ld bc, SHOT_ACTIVE
+    add hl, bc              ; Point to ACTIVE byte
+    ld (hl), 0              ; Set to inactive
+    ld de, SHOT_OBJ_SIZE
+    add hl, de              ; Move to next shot
+    djnz .reset_loop
+    ret

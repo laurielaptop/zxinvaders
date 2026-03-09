@@ -2,44 +2,31 @@
 ; Sets color attributes at top-right of screen for visual debugging
 
 ; Debug indicator positions (top-right corner)
-DEBUG_FIRE_COUNTER: equ SCREEN_ATTRS + 28      ; Position 28 - shows counter progress
+DEBUG_SHIELDS:      equ SCREEN_ATTRS + 26      ; Position 26 - cyan when shields drawn
+DEBUG_COLL_STATE:   equ SCREEN_ATTRS + 27      ; Position 27 - collision scanner state
+DEBUG_COLL_ROW:     equ SCREEN_ATTRS + 28      ; Position 28 - detected hit row (paper color)
 DEBUG_FIRE_ATTEMPT: equ SCREEN_ATTRS + 29      ; Position 29 - flashes when attempting fire
 DEBUG_SHOT_CREATED: equ SCREEN_ATTRS + 30      ; Position 30 - set when shot created
 DEBUG_SHOT_ACTIVE:  equ SCREEN_ATTRS + 31      ; Position 31 (rightmost) - red when active
+DEBUG_COLL_COL:     equ SCREEN_ATTRS + 25      ; Position 25 - detected hit col (paper color)
 
 ; Colors: FLASH(7) | BRIGHT(6) | PAPER(5-3) | INK(2-0)
 ; Use PAPER colors so full 8x8 attribute cells are always visible.
-DEBUG_COLOR_BLACK:  equ 0x00               ; PAPER black
-DEBUG_COLOR_BLUE:   equ 0x08               ; PAPER blue
-DEBUG_COLOR_RED:    equ 0x10               ; PAPER red
-DEBUG_COLOR_GREEN:  equ 0x20               ; PAPER green
-DEBUG_COLOR_YELLOW: equ 0x30               ; PAPER yellow
+DEBUG_COLOR_BLACK:   equ 0x00               ; PAPER black
+DEBUG_COLOR_CYAN:    equ 0x28               ; PAPER cyan
+DEBUG_COLOR_BLUE:    equ 0x08               ; PAPER blue
+DEBUG_COLOR_RED:     equ 0x10               ; PAPER red
+DEBUG_COLOR_GREEN:   equ 0x20               ; PAPER green
+DEBUG_COLOR_YELLOW:  equ 0x30               ; PAPER yellow
 
 Debug_Init:
     ; Clear all debug indicators to black
-    ld hl, DEBUG_FIRE_COUNTER
+    ld hl, DEBUG_SHIELDS
+    ld b, 6                      ; Clear top-right debug cells 26..31
+.loop:
     ld (hl), DEBUG_COLOR_BLACK
     inc hl
-    ld (hl), DEBUG_COLOR_BLACK
-    inc hl
-    ld (hl), DEBUG_COLOR_BLACK
-    inc hl
-    ld (hl), DEBUG_COLOR_BLACK
-    ret
-
-Debug_ShowFireCounter:
-    ; Show counter progress (cycles colors every few frames)
-    ; A = counter value
-    push af
-    and 0x07                     ; Take low 3 bits
-    jr nz, Debug_CounterColor
-    ld a, DEBUG_COLOR_BLACK
-    jr Debug_SetCounter
-Debug_CounterColor:
-    ld a, DEBUG_COLOR_BLUE
-Debug_SetCounter:
-    ld (DEBUG_FIRE_COUNTER), a
-    pop af
+    djnz .loop
     ret
 
 Debug_ShowFireAttempt:
@@ -72,4 +59,89 @@ Debug_UpdateShotActive:
 Debug_HasActive:
     ld a, DEBUG_COLOR_YELLOW
     ld (DEBUG_SHOT_ACTIVE), a
+    ret
+
+Debug_UpdateShields:
+    ; Show cyan when shields are being processed
+    ld a, DEBUG_COLOR_CYAN
+    ld (DEBUG_SHIELDS), a
+    ret
+
+Debug_ClearShields:
+    ; Clear shields debug indicator
+    ld a, DEBUG_COLOR_BLACK
+    ld (DEBUG_SHIELDS), a
+    ret
+
+Debug_UpdatePlayerHit:
+    ; Show red when player is hit/exploding
+    ld hl, GAME_RAM_BASE + PLAYER_STATUS
+    ld a, (hl)
+    cp 0xFF
+    jr z, Debug_PlayerNotHit
+    ; Player is hit - show bright red
+    ld a, DEBUG_COLOR_RED | 0x40    ; Bright red
+    ld (SCREEN_ATTRS + 31), a
+    ret
+Debug_PlayerNotHit:
+    ; Normal - show black
+    ld a, DEBUG_COLOR_BLACK
+    ld (SCREEN_ATTRS + 31), a
+    ret
+
+Debug_CollisionProbeNoShot:
+    ; No player shot active this frame.
+    push af
+    ld a, DEBUG_COLOR_BLACK
+    ld (DEBUG_COLL_STATE), a
+    ld (DEBUG_COLL_ROW), a
+    ld (DEBUG_COLL_COL), a
+    pop af
+    ret
+
+Debug_CollisionProbeScan:
+    ; Player shot is active and scan is running.
+    push af
+    ld a, DEBUG_COLOR_BLUE
+    ld (DEBUG_COLL_STATE), a
+    pop af
+    ret
+
+Debug_CollisionProbeHit:
+    ; Show detected row/column from collision scan.
+    ; Input: D=row (0..4), E=col (0..10)
+    push af
+
+    ld a, DEBUG_COLOR_GREEN
+    ld (DEBUG_COLL_STATE), a
+
+    ; Row color: PAPER = row value (0..4)
+    ld a, d
+    and 0x07
+    add a, a
+    add a, a
+    add a, a
+    or 0x40                    ; Bright for visibility
+    ld (DEBUG_COLL_ROW), a
+
+    ; Column color: low 3 bits in PAPER color, flash if >= 8
+    ld a, e
+    and 0x07
+    add a, a
+    add a, a
+    add a, a
+    ld h, a
+    ld a, e
+    cp 8
+    jr c, .col_no_flash
+    ld a, h
+    or 0x80                    ; FLASH marks columns 8..10
+    jr .col_store
+.col_no_flash:
+    ld a, h
+.col_store:
+    or 0x40                    ; Bright
+    ld (DEBUG_COLL_COL), a
+
+    pop af
     ret

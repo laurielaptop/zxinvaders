@@ -1,0 +1,170 @@
+; Alien explosion module
+; Handles alien death animation when hit by player shot
+
+AlienHit_Init:
+    ; Initialize alien explosion state
+    ld hl, GAME_RAM_BASE + ALIEN_EXPLODING
+    ld (hl), 0xFF           ; 0xFF = no explosion active
+    ret
+
+AlienHit_OnHit:
+    ; Trigger explosion at given position
+    ; Input: B = X position, C = Y position, DE = alien index
+    ; Returns: Z on success (explosion started), NZ if ignored
+    
+    ; Check if explosion already in progress
+    ld a, (GAME_RAM_BASE + ALIEN_EXPLODING)
+    cp 0xFF
+    jr z, AlienHit_OnHitStart
+    ld a, 1
+    or a                    ; NZ = ignored (already exploding)
+    ret
+
+AlienHit_OnHitStart:
+    
+    ; Save explosion position
+    ld a, b
+    ld (GAME_RAM_BASE + ALIEN_EXPLOSION_X), a
+    ld a, c
+    ld (GAME_RAM_BASE + ALIEN_EXPLOSION_Y), a
+    
+    ; Initialize explosion state
+    ld hl, GAME_RAM_BASE + ALIEN_EXPLODING
+    ld (hl), 0              ; Start explosion
+    
+    ld hl, GAME_RAM_BASE + ALIEN_EXPLOSION_DELAY
+    ld (hl), 16             ; 16 frame delay (arcade authentic)
+    
+    ; Store alien grid index for later marking as dead
+    ld a, e
+    ld (GAME_RAM_BASE + ALIEN_EXPLOSION_INDEX), a
+
+    xor a                   ; Z = success
+    ret
+
+AlienHit_Update:
+    ; Update explosion animation state
+    ; Returns: nothing
+    
+    ; Check if explosion active
+    ld a, (GAME_RAM_BASE + ALIEN_EXPLODING)
+    cp 0xFF
+    ret z                   ; No explosion active
+    
+    ; Decrement delay timer
+    ld hl, GAME_RAM_BASE + ALIEN_EXPLOSION_DELAY
+    dec (hl)
+    ret nz                  ; Still counting down
+    
+    ; Timer expired - end explosion
+    ld hl, GAME_RAM_BASE + ALIEN_EXPLODING
+    ld (hl), 0xFF           ; Mark explosion complete
+    
+    ; Actually kill the alien now (set grid flag to 0)
+    ld a, (GAME_RAM_BASE + ALIEN_EXPLOSION_INDEX)
+    ld e, a
+    ld d, 0
+    ld hl, ALIEN_GRID_BASE
+    add hl, de
+    ld (hl), 0              ; Mark alien dead in grid
+    
+    ret
+
+AlienHit_Erase:
+    ; Erase explosion sprite at last position
+    ; Returns: nothing
+    
+    ; Check if explosion active
+    ld a, (GAME_RAM_BASE + ALIEN_EXPLODING)
+    cp 0xFF
+    ret z                   ; No explosion to erase
+    
+    ; Get explosion position
+    ld a, (GAME_RAM_BASE + ALIEN_EXPLOSION_X)
+    ld b, a
+    ld a, (GAME_RAM_BASE + ALIEN_EXPLOSION_Y)
+    ld c, a
+    
+    ; Calculate screen address
+    ld a, b                   ; Video_CalcAddress expects A=X, C=Y
+    call Video_CalcAddress
+    
+    ; Clear 16-pixel tall sprite (16 bytes)
+    ld c, 16
+AlienHit_EraseClearLoop:
+    xor a
+    ld (hl), a
+    call AlienHit_NextScanline
+    dec c
+    jr nz, AlienHit_EraseClearLoop
+    
+    ret
+
+AlienHit_Draw:
+    ; Draw explosion sprite at current position
+    ; Returns: nothing
+    
+    ; Check if explosion active
+    ld a, (GAME_RAM_BASE + ALIEN_EXPLODING)
+    cp 0xFF
+    ret z                   ; No explosion to draw
+    
+    ; Get explosion position
+    ld a, (GAME_RAM_BASE + ALIEN_EXPLOSION_X)
+    ld b, a
+    ld a, (GAME_RAM_BASE + ALIEN_EXPLOSION_Y)
+    ld c, a
+    
+    ; Calculate screen address
+    ld a, b                   ; Video_CalcAddress expects A=X, C=Y
+    call Video_CalcAddress
+    
+    ; Draw 16-byte explosion sprite
+    ld de, AlienExplosionSprite
+    ld c, 16
+AlienHit_DrawLoop:
+    ld a, (de)
+    ld (hl), a
+    inc de
+    call AlienHit_NextScanline
+    dec c
+    jr nz, AlienHit_DrawLoop
+
+    ret
+
+AlienHit_NextScanline:
+    ; Advance HL to next pixel row in ZX bitmap memory.
+    inc h
+    ld a, h
+    and 0x07
+    ret nz
+
+    ld a, l
+    add a, 0x20
+    ld l, a
+    ret c
+
+    ld a, h
+    sub 0x08
+    ld h, a
+    ret
+
+; Arcade-authentic alien explosion sprite (16 bytes)
+; Based on original 8080 code at 0x1CC0
+AlienExplosionSprite:
+    defb 0x00    ; ........
+    defb 0x08    ; ...*....
+    defb 0x49    ; *..*..*.
+    defb 0x22    ; .*...*..
+    defb 0x14    ; ..*.*...
+    defb 0x81    ; *......*
+    defb 0x42    ; .*....*.
+    defb 0x00    ; ........
+    defb 0x42    ; .*....*.
+    defb 0x81    ; *......*
+    defb 0x14    ; ..*.*...
+    defb 0x22    ; .*...*..
+    defb 0x49    ; *..*..*.
+    defb 0x08    ; ...*....
+    defb 0x00    ; ........
+    defb 0x00    ; ........

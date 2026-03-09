@@ -40,6 +40,47 @@ Video_CalcAddress:
     
     ret
 
+; Calculate screen attribute address from X,Y pixel coordinates
+; Input: A=X (0-255), C=Y (0-191)
+; Output: HL = screen attribute address (0x5800-0x5BFF)
+; Attributes: Simple linear layout, 32 chars per row × 24 rows = 768 bytes
+; Address = 0x5800 + ((Y/8) * 32) + (X/8)
+Video_CalcAttrAddress:
+    push af
+    
+    ; Convert Y pixel to character row (divide by 8)
+    ld a, c                     ; A = Y (0-191)
+    srl a
+    srl a
+    srl a                       ; A = Y / 8 (character row 0-23)
+    ld h, 0
+    ld l, a                     ; HL = row
+    
+    ; Multiply row by 32 using 16-bit adds
+    add hl, hl                  ; HL = row * 2
+    add hl, hl                  ; HL = row * 4
+    add hl, hl                  ; HL = row * 8
+    add hl, hl                  ; HL = row * 16
+    add hl, hl                  ; HL = row * 32 (now 0-736)
+    
+    ; Add base address 0x5800
+    ld bc, 0x5800
+    add hl, bc                  ; HL = 0x5800 + (row*32)
+    
+    pop af                      ; Restore X
+    srl a
+    srl a
+    srl a                       ; A = X / 8 (character column 0-31)
+    
+    ; Add column to address
+    add a, l
+    ld l, a
+    jr nc, .attr_no_carry       ; If no carry, we're done
+    inc h                       ; Handle carry - move to next page
+.attr_no_carry:
+    
+    ret
+
 TEST_SPRITE:
     db 24
     db 60
