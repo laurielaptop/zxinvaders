@@ -1,20 +1,142 @@
 ; Game/game_over.z80 - Game-over state and restart logic
 
 ; GameOver_Trigger
-; Display game-over message and wait for player input or timeout
+; Enter game-over state, clear playfield, and show message.
 GameOver_Trigger:
-    ; TODO: Display "GAME OVER" at screen center
-    ; TODO: Wait for START key or 3-second timeout
-    ; TODO: Call restart on any input
+    call Video_ClearBitmap
+    xor a
+    ld (GAME_OVER_FIRE_LATCH), a
+    ld a, 180                 ; Auto-restart after a short delay (~3s at ~60 fps)
+    ld (GAME_OVER_TIMER), a
+    call GameOver_DrawMessage
+    ret
+
+; GameOver_Update
+; In game-over mode: wait for fresh fire press or timeout, then restart.
+GameOver_Update:
+    call GameOver_DrawMessage
+
+    ; Detect fresh fire press (space key bit2 from Input_ReadState).
+    call Input_ReadState
+    bit 2, a
+    jr z, GameOver_FireReleased
+
+    ld a, (GAME_OVER_FIRE_LATCH)
+    or a
+    ret nz
+
+    ld a, 1
+    ld (GAME_OVER_FIRE_LATCH), a
+    call GameOver_Restart
+    ret
+
+GameOver_FireReleased:
+    xor a
+    ld (GAME_OVER_FIRE_LATCH), a
+
+    ; Timeout fallback so game never gets stuck here.
+    ld hl, GAME_OVER_TIMER
+    ld a, (hl)
+    or a
+    ret z
+    dec (hl)
+    ret nz
+
+    call GameOver_Restart
     ret
 
 ; GameOver_Restart
-; Reset for new wave: lives to 3, shields to intact, aliens to formation, player to center
+; Full restart: reset gameplay systems and return to playing mode.
 GameOver_Restart:
-    call Player_Init         ; Reset player position and status
-    call Aliens_Reset        ; Reset alien formation
-    call Shields_Reset       ; Reset shields to intact
-    call PlayerHit_Init      ; Reset lives to 3
-    call Shot_Reset          ; Clear any in-flight shots
-    call EnemyShot_Reset     ; Clear enemy shots
+    call Video_ClearBitmap
+    call GameState_Init
+    call Player_Init
+    call Shot_Init
+    call EnemyShot_Init
+    call Aliens_Init
+    call Shields_Init
+    call Saucer_Init
+    call PlayerHit_Init
+    call AlienHit_Init
+
+    xor a
+    ld (GAME_OVER_FIRE_LATCH), a
+    ld (GAME_OVER_TIMER), a
+    ld a, GAME_MODE_PLAYING
+    ld (STATE_GAME_MODE), a
     ret
+
+; Draws an 8-char "GAME OVER" banner using local 8x8 glyphs.
+GameOver_DrawMessage:
+    ld hl, GameOver_Message
+    ld d, 96                  ; X start
+    ld e, 88                  ; Y start
+    ld b, 8
+.char_loop:
+    push bc
+    push hl
+    ld a, (hl)
+    call GameOver_DrawGlyph
+    pop hl
+    inc hl
+    ld a, d
+    add a, 8
+    ld d, a
+    pop bc
+    djnz .char_loop
+    ret
+
+; A = glyph index, D = X, E = Y
+GameOver_DrawGlyph:
+    push bc
+    push de
+    push hl
+
+    ld h, 0
+    ld l, a
+    add hl, hl
+    add hl, hl
+    add hl, hl                ; index * 8
+    ld bc, GameOver_Glyphs
+    add hl, bc                ; HL = glyph data
+
+    ld a, d
+    ld c, e
+    call Video_CalcAddress
+    ex de, hl                 ; DE = screen ptr, HL = glyph ptr
+
+    ld b, 8
+.row_loop:
+    ld a, (hl)
+    ld (de), a
+    inc hl
+    inc d
+    djnz .row_loop
+
+    pop hl
+    pop de
+    pop bc
+    ret
+
+; Encoded as glyph indices: G A M E _ O V E R
+GameOver_Message:
+    db 0, 1, 2, 3, 4, 5, 6, 7
+
+; Glyph order: G A M E space O V R
+GameOver_Glyphs:
+    ; G
+    db 0x3C,0x66,0x60,0x6E,0x66,0x66,0x3C,0x00
+    ; A
+    db 0x18,0x3C,0x66,0x66,0x7E,0x66,0x66,0x00
+    ; M
+    db 0x63,0x77,0x7F,0x6B,0x63,0x63,0x63,0x00
+    ; E
+    db 0x7E,0x60,0x60,0x7C,0x60,0x60,0x7E,0x00
+    ; space
+    db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+    ; O
+    db 0x3C,0x66,0x66,0x66,0x66,0x66,0x3C,0x00
+    ; V
+    db 0x66,0x66,0x66,0x66,0x66,0x3C,0x18,0x00
+    ; R
+    db 0x7C,0x66,0x66,0x7C,0x68,0x6C,0x66,0x00

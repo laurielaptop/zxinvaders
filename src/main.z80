@@ -40,6 +40,18 @@ START:
     call Debug_Init
 
 MAIN_LOOP:
+    ld a, (STATE_GAME_MODE)
+    cp GAME_MODE_PLAYING
+    jr z, MAIN_LOOP_PLAYING
+
+    cp GAME_MODE_GAME_OVER
+    jr z, MAIN_LOOP_GAME_OVER
+
+    ; Fallback to playing if mode is unknown.
+    ld a, GAME_MODE_PLAYING
+    ld (STATE_GAME_MODE), a
+
+MAIN_LOOP_PLAYING:
     ; Erase old sprites
     call Player_Erase
     call Shot_Erase
@@ -56,6 +68,12 @@ MAIN_LOOP:
     call EnemyShot_Update
         call AlienHit_Update
     call PlayerHit_Update          ; Update player blowup animation
+
+    ; If PlayerHit_Update switched to game-over, stop this frame here.
+    ld a, (STATE_GAME_MODE)
+    cp GAME_MODE_PLAYING
+    jr nz, MAIN_LOOP_EARLY_EXIT
+
     call Saucer_Update             ; Update saucer (timing, movement, hits)
     call Debug_UpdateShotActive
     call Debug_UpdatePlayerHit
@@ -75,7 +93,13 @@ MAIN_LOOP:
     call Saucer_Draw               ; Draw saucer
     call Shields_Draw           ; Draw shields
     call HUD_Draw
-    
+
+MAIN_LOOP_EARLY_EXIT:
+    call Timing_WaitShort
+    jr MAIN_LOOP
+
+MAIN_LOOP_GAME_OVER:
+    call GameOver_Update
     call Timing_WaitShort
     jr MAIN_LOOP
 

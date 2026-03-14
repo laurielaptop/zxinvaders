@@ -9,8 +9,13 @@ PlayerHit_Init:
     ld (hl), 0              ; Blowup delay
     ld hl, PLAYER_BLOWUP_FRAMES
     ld (hl), 0              ; Blowup frames
+    ld a, PLAYER_LIVES_START
+    ld (STATE_LIVES), a
     ld hl, PLAYER_LIVES_REMAINING
-    ld (hl), PLAYER_LIVES_START
+    ld (hl), a
+    xor a
+    ld (GAME_OVER_TIMER), a
+    ld (GAME_OVER_FIRE_LATCH), a
     ret
 
 ; PlayerHit_OnHit
@@ -29,9 +34,11 @@ PlayerHit_OnHit:
     ld hl, PLAYER_BLOWUP_FRAMES
     ld (hl), 6              ; Number of sprite toggles
     
-    ; Decrement lives
-    ld hl, PLAYER_LIVES_REMAINING
+    ; Decrement lives (STATE_LIVES is authoritative)
+    ld hl, STATE_LIVES
     dec (hl)
+    ld a, (hl)
+    ld (PLAYER_LIVES_REMAINING), a
     ret
 
 ; PlayerHit_Update
@@ -57,7 +64,25 @@ PlayerHit_Update:
     ; Animation complete
     ld hl, GAME_RAM_BASE + PLAYER_STATUS
     ld (hl), 0xFF           ; Back to normal status
-    xor a                   ; Set Z flag
+
+    ; If no lives remain, enter game-over state.
+    ld a, (STATE_LIVES)
+    ld (PLAYER_LIVES_REMAINING), a
+    or a
+    jr z, PlayerHit_GameOver
+
+    ; Respawn player for next life.
+    call Player_Init
+    call Shot_Reset
+    call EnemyShot_Reset
+    xor a
+    ret
+
+PlayerHit_GameOver:
+    ld a, GAME_MODE_GAME_OVER
+    ld (STATE_GAME_MODE), a
+    call GameOver_Trigger
+    xor a                   ; Keep Z flag set for callers that care.
     ret
 
 ; PlayerHit_Erase
@@ -237,7 +262,7 @@ PlayerExplosion2:
 ; PlayerHit_GetLives
 ; Return current lives count in A
 PlayerHit_GetLives:
-    ld hl, PLAYER_LIVES_REMAINING
+    ld hl, STATE_LIVES
     ld a, (hl)
     ret
 

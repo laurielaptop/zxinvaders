@@ -53,11 +53,16 @@ DEBUG_STATUS_BASE: equ SCREEN_PIXELS + 32
 ; HUD layout
 HUD_SCORE_X: equ 8
 HUD_SCORE_Y: equ 0
+HUD_LIVES_X: equ 40
+HUD_LIVES_Y: equ 0
 
 ; ===== Global Game State =====
 STATE_SCORE: equ GAME_RAM_BASE + 160
 STATE_LIVES: equ GAME_RAM_BASE + 163
 STATE_GAME_MODE: equ GAME_RAM_BASE + 164  ; 0=title, 1=playing, 2=game_over
+GAME_MODE_TITLE: equ 0
+GAME_MODE_PLAYING: equ 1
+GAME_MODE_GAME_OVER: equ 2
 
 ; ===== Player Sprite Parameters =====
 PLAYER_WIDTH: equ 16
@@ -132,6 +137,7 @@ ALIEN_EXPLOSION_DELAY: equ GAME_RAM_BASE + 187   ; Timer (reload=16, arcade auth
 ALIEN_EXPLOSION_X: equ GAME_RAM_BASE + 188       ; X position of exploding alien
 ALIEN_EXPLOSION_Y: equ GAME_RAM_BASE + 189       ; Y position of exploding alien
 ALIEN_EXPLOSION_INDEX: equ GAME_RAM_BASE + 190   ; Alien grid index to mark dead when done
+GAME_OVER_FIRE_LATCH: equ GAME_RAM_BASE + 191   ; 0=up, 1=held
 
 
 ; ===== Saucer (Mystery Ship / UFO) =====

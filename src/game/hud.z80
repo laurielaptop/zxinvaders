@@ -7,9 +7,9 @@ GameState_Init:
     ld (STATE_SCORE), a
     ld (STATE_SCORE + 1), a
     ld (STATE_SCORE + 2), a
-    ld a, 3
+    ld a, PLAYER_LIVES_START
     ld (STATE_LIVES), a
-    ld a, 1
+    ld a, GAME_MODE_PLAYING
     ld (STATE_GAME_MODE), a
     ret
 
@@ -53,6 +53,12 @@ HUD_TensDone:
     ld c, HUD_SCORE_Y
     call HUD_DrawDigit
 
+    ; Draw lives as a single digit (0-9)
+    ld a, (STATE_LIVES)
+    ld b, HUD_LIVES_X
+    ld c, HUD_LIVES_Y
+    call HUD_DrawDigit
+
     ret
 
 HUD_DrawDigit:
@@ -68,12 +74,15 @@ HUD_DrawDigit:
     add hl, hl                   ; x4
     add hl, hl                   ; x8
     ld de, HUD_DIGITS
-    add hl, de
+    add hl, de                   ; HL = sprite ptr (HUD_DIGITS + digit*8)
 
     ; Get screen destination
+    push hl                      ; Save sprite ptr (Video_CalcAddress clobbers HL)
     ld a, b
-    call Video_CalcAddress
-    ex de, hl                    ; DE = screen ptr, HL = sprite ptr
+    call Video_CalcAddress       ; HL = screen address
+    ld d, h
+    ld e, l                      ; DE = screen address
+    pop hl                       ; HL = sprite ptr
 
     ld b, 8
 HUD_DrawDigitLoop:

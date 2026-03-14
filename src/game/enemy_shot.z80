@@ -477,9 +477,11 @@ EnemyShot_Reset:
     ld hl, ENEMY_SHOT_LIST_BASE
     ld b, MAX_ENEMY_SHOTS
 .reset_loop:
-    ld bc, ENEMY_SHOT_ACTIVE
-    add hl, bc              ; Point to ACTIVE byte
+    push hl
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de              ; Point to ACTIVE byte
     ld (hl), 0              ; Set to inactive
+    pop hl
     ld de, ENEMY_SHOT_OBJ_SIZE
     add hl, de              ; Move to next shot
     djnz .reset_loop

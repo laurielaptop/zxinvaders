@@ -14,8 +14,8 @@ Player_Init:
     ld (hl), PLAYER_Y_DEFAULT
     inc hl
     
-    ; Status (0 = normal)
-    ld (hl), 0
+    ; Status (0xFF = normal, matches player hit/explosion checks)
+    ld (hl), 0xFF
     inc hl
     
     ; Fire state (0 = no fire)
