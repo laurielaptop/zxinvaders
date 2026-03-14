@@ -67,7 +67,11 @@ AlienHit_Update:
     ld hl, ALIEN_GRID_BASE
     add hl, de
     ld (hl), 0              ; Mark alien dead in grid
-    
+
+    ; Decrement remaining alien count for wave-clear detection
+    ld hl, ALIEN_COUNT_REMAINING
+    dec (hl)
+
     ret
 
 AlienHit_Erase:

@@ -67,6 +67,12 @@ MAIN_LOOP_PLAYING:
     call Shot_Update
     call EnemyShot_Update
         call AlienHit_Update
+
+    ; Wave-clear check: if all aliens are dead, advance to next wave.
+    ; Scan the live grid each frame (matches original 8080 CountAliens behavior).
+    call Aliens_HasLive
+    jp z, MAIN_LOOP_WAVE_CLEAR
+
     call PlayerHit_Update          ; Update player blowup animation
 
     ; If PlayerHit_Update switched to game-over, stop this frame here.
@@ -93,15 +99,20 @@ MAIN_LOOP_PLAYING:
     call Saucer_Draw               ; Draw saucer
     call Shields_Draw           ; Draw shields
     call HUD_Draw
+    jp MAIN_LOOP_EARLY_EXIT
+
+MAIN_LOOP_WAVE_CLEAR:
+    call Aliens_NewWave
+    ; Fall through to early-exit so the new wave draws clean on the next frame.
 
 MAIN_LOOP_EARLY_EXIT:
     call Timing_WaitShort
-    jr MAIN_LOOP
+    jp MAIN_LOOP
 
 MAIN_LOOP_GAME_OVER:
     call GameOver_Update
     call Timing_WaitShort
-    jr MAIN_LOOP
+    jp MAIN_LOOP
 
 STACK_TOP: equ 65535
 

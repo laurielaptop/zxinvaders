@@ -14,6 +14,8 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Saucer/UFO is fully implemented** with tuned ZX timing (256 game-loop countdown under current busy-wait pacing), horizontal movement, direction determination based on shot count, score table advancement (50/100/150/300 points), hit detection, and explosion sequence.
 - **Player and alien explosion systems are implemented** (timed animation, hit-triggered state machines, and cleanup).
 - **Task 1 (lives + game-over/restart) is complete**: HUD lives digit renders correctly, lives decrement on hit, game-over mode triggers at zero lives, screen clears and "GAME OVER" banner is shown, and restart is available via fire key or auto-timeout (180 frames).
+- **Task 2 (wave-clear detection) is complete**: when all 55 aliens are killed, the screen clears and a full new wave spawns with shields regenerated and the formation starting 8 pixels lower each wave (cycling over 8 waves). Lives and score carry over. See `docs/wave-clear-logic.md`.
+- **Gameplay pacing has been tuned up slightly** for iteration: shorter main-loop wait (`Timing_WaitShort`) and faster player shot speed (`SHOT_SPEED=5`).
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 - **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
 - **Alien sprite parity is complete** (ROM-derived A/B/C row families, 2-frame animation, deterministic transform pipeline).
@@ -64,7 +66,8 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
    - Player shot: spawn, update, erase/draw, alien collision
    - Aliens: grid state, formation movement, edge descent, draw/erase
    - Enemy shots: periodic fire, column table, bottom-up selection, movement, erase/draw, player collision
-   - HUD: score state init, score rendering, and lives digit
+   - HUD: score state init, score rendering, lives digit, and wave number tracking
+   - Wave progression: wave-clear detection, formation reinit, wave-specific starting Y (8-wave table from 8080 `AlienStartTable`)
 
 5. **Timing**
    - Busy-wait frame pacing in main loop (temporary)
@@ -81,9 +84,15 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - Frame pacing still uses busy-wait timing rather than ISR/vblank sync.
 - Rendering still shows expected Spectrum flicker under full redraw load.
 - Lives/game-over flow could benefit from a polish pass (arcade-authentic respawn delay suppressing enemy fire, improved messaging/UI).
-- Wave progression flow is not yet implemented.
+- Wave progression is implemented, but still needs parity tuning against original pacing and transition timing.
 - Saucer bring-up diagnostics have been removed from the main loop after render/timing validation.
 - Player sprite path still needs final table/byte-order lock to match arcade silhouette.
+
+### Known Issues
+- **Intermittent random colored attribute squares still appear on screen in gameplay.**
+   - Symptom: occasional non-gameplay color blocks appear in the bitmap/attribute area.
+   - Current understanding: this indicates unintended writes into attribute memory (`0x5800-0x5AFF`).
+   - Status: unresolved; requires targeted instrumentation to isolate exact write path and frame context.
 
 ### Gameplay Parity Gaps (Confirmed)
 - Saucer/UFO bonus target is now implemented (timed top-row flyby + score award based on arcade behavior, with timing currently calibrated for busy-wait frame pacing).
@@ -103,6 +112,7 @@ For each missing gameplay element, we must complete a short 8080 behavior note b
 Target documents to produce/extend next:
 - `docs/gameplay-parity-gaps.md`
 - `docs/lives-and-game-over-logic.md`
+- `docs/wave-clear-logic.md` ✅ complete
 - `docs/shields-logic.md`
 - `docs/saucer-ufo-logic.md`
 - `docs/alien-shot-types-logic.md`
@@ -111,15 +121,15 @@ Target documents to produce/extend next:
 - `docs/explosions-logic.md`
 
 ### Remaining Steps
-1. **Task 2**: Add wave-clear detection and next-wave setup (check alien count post-move, reinitialise formation on zero, reset shields, advance difficulty).
+1. **Task 3**: Expand enemy fire to arcade-like shot families (plunger, squiggly, rolling) and reload/timing parity (see `docs/enemy-fire-logic.md`).
+2. Resolve the **attribute-square known issue** (unexpected writes into attribute RAM during gameplay).
 3. Revisit/complete shields parity details (damage/collision behavior remains simplified).
 4. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.
-5. Expand enemy fire to arcade-like shot families and reload/timing parity.
-6. Resolve player sprite parity by isolating shifted-draw interpretation (byte-aligned A/B candidate tables), then lock final player table.
-7. Replace placeholder saucer/shield/shot graphics with source-derived monochrome sprite tables.
-8. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
-9. End-phase optimization: ISR-synchronized rendering to reduce flicker.
-10. Audio pass: fire, hit, and alien movement sound effects.
+5. Resolve player sprite parity by isolating shifted-draw interpretation (byte-aligned A/B candidate tables), then lock final player table.
+6. Replace placeholder saucer/shield/shot graphics with source-derived monochrome sprite tables.
+7. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
+8. End-phase optimization: ISR-synchronized rendering to reduce flicker.
+9. Audio pass: fire, hit, and alien movement sound effects.
 
 ## Build/Run Verification Note
 - `make run-zesarux` is the correct command and does rebuild/package before launch.

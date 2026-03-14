@@ -7,6 +7,7 @@ GameState_Init:
     ld (STATE_SCORE), a
     ld (STATE_SCORE + 1), a
     ld (STATE_SCORE + 2), a
+    ld (WAVE_NUMBER), a         ; Reset wave to 0 (wave 1 is index 0)
     ld a, PLAYER_LIVES_START
     ld (STATE_LIVES), a
     ld a, GAME_MODE_PLAYING

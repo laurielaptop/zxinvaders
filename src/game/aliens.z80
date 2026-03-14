@@ -9,6 +9,10 @@ Aliens_InitLoop:
     ld (hl), 1
     inc hl
     djnz Aliens_InitLoop
+
+    ; Track live alien count for wave-clear detection
+    ld a, ALIEN_COUNT
+    ld (ALIEN_COUNT_REMAINING), a
     
     ; Initialize movement state
     ld a, ALIEN_INIT_X
@@ -427,6 +431,20 @@ Aliens_HitRightEdge:
     ld (ALIEN_DELTA_Y), a        ; Step down
     ret
 
+; Aliens_HasLive
+; Returns NZ if any alien is alive, Z if all aliens are dead.
+Aliens_HasLive:
+    ld hl, ALIEN_GRID_BASE
+    ld b, ALIEN_COUNT
+.scan_loop:
+    ld a, (hl)
+    or a
+    ret nz
+    inc hl
+    djnz .scan_loop
+    xor a
+    ret
+
 ; Aliens_Reset
 ; Reset alien formation to initial state (for game restart)
 ; Calls Aliens_Init to re-initialize
@@ -434,5 +452,53 @@ Aliens_Reset:
     jp Aliens_Init
 
     ret
+
+; Aliens_NewWave
+; Called when all aliens on screen have been killed.
+; Advances the wave counter, picks the wave's starting Y, clears the screen,
+; re-initialises aliens/shots/shields/saucer but preserves player and score.
+;
+; 8080 reference: 0x0A09 wave-clear handler – increments rackCnt (0-7 cycling),
+; looks up starting Y from AlienStartTable, redraws shields, calls InitAliens.
+;
+; ZX wave starting-Y table (8 entries, indexed by WAVE_NUMBER & 7):
+;   wave 1: Y=24  wave 5: Y=48
+;   wave 2: Y=32  wave 6: Y=48
+;   wave 3: Y=40  wave 7: Y=56
+;   wave 4: Y=48  wave 8: Y=56
+Aliens_NewWave:
+    ; Advance wave index (0-7, cycling)
+    ld hl, WAVE_NUMBER
+    inc (hl)
+    ld a, (hl)
+    and 0x07
+    ld (hl), a
+
+    ; Look up starting Y for this wave
+    ld e, a
+    ld d, 0
+    ld hl, Aliens_WaveStartY
+    add hl, de
+    ld a, (hl)          ; A = starting Y for new wave
+    push af             ; Save across Video_ClearBitmap clobber
+
+    ; Clear the screen and reinitialise sub-systems
+    call Video_ClearBitmap
+    call Aliens_Init    ; Resets grid to 55 alive + ALIEN_COUNT_REMAINING=55 + X/Y to defaults
+    call AlienHit_Init
+    call Shot_Init
+    call EnemyShot_Init
+    call Shields_Init
+    call Saucer_Init
+
+    ; Override alien starting Y with wave-specific value
+    pop af
+    ld (ALIEN_REF_Y), a
+    ld (ALIEN_PREV_REF_Y), a
+    ret
+
+Aliens_WaveStartY:
+    ; Starting Y per wave (index 0-7 = wave 1-8)
+    db 24, 32, 40, 48, 48, 48, 56, 56
 
 include "game/alien_sprites_rom_rotated.z80"
