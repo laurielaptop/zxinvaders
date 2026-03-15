@@ -19,6 +19,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Gameplay pacing has been tuned up slightly** for iteration: shorter main-loop wait (`Timing_WaitShort`) and faster player shot speed (`SHOT_SPEED=5`).
 - **Gameplay pacing has been tuned up again** for broader responsiveness: `Timing_WaitShort` loop reduced to 2800, alien march delay reduced to 7, player shot speed increased to 6, enemy shot speed increased to 3, and enemy family fire delay reduced to 18.
 - **Player sprite parity isolation toggle added**: `PLAYER_DEBUG_BYTE_ALIGN` can force player X to 8-pixel alignment (`src/constants.z80`) so the no-shift draw path can be validated against shifted rendering.
+- **Player sprite A/B table toggle added**: `PLAYER_SPRITE_TABLE_SELECT` now switches between two candidate byte-order tables for fast visual comparison.
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 - **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
 - **Alien sprite parity is complete** (ROM-derived A/B/C row families, 2-frame animation, deterministic transform pipeline).
@@ -150,6 +151,7 @@ Target documents to produce/extend next:
 4. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.
 5. Resolve player sprite parity by isolating shifted-draw interpretation (byte-aligned A/B candidate tables), then lock final player table.
    - Progress (2026-03-15): compile-time isolation toggle implemented (`PLAYER_DEBUG_BYTE_ALIGN`) and wired into player init/movement path to force byte-aligned drawing when enabled.
+   - Progress (2026-03-15): in-game A/B table switch added (`PLAYER_SPRITE_TABLE_SELECT`) with candidate tables in `src/game/player_sprite_rom_rotated.z80`.
 6. Replace placeholder saucer/shield/shot graphics with source-derived monochrome sprite tables.
 7. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
 8. End-phase optimization: ISR-synchronized rendering to reduce flicker.

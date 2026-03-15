@@ -174,8 +174,13 @@ Player_Draw:
     and 0x07
     ld c, a
     
-    ; Draw ROM-derived CCW-rotated player sprite (16x8)
-    ld de, PLAYER_SHIP_CW
+    ; Draw selected player sprite candidate table (16x8)
+    ld de, PLAYER_SHIP_CW_A
+    ld a, PLAYER_SPRITE_TABLE_SELECT
+    or a
+    jr z, Player_DrawTableSelected
+    ld de, PLAYER_SHIP_CW_B
+Player_DrawTableSelected:
     ld b, PLAYER_HEIGHT
     
 Player_DrawLoop:
