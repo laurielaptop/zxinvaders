@@ -86,11 +86,15 @@ SHOT_ACTIVE: equ 3         ; 0=inactive, 1=active
 SHOT_OBJ_SIZE: equ 4
 
 ; Enemy shots
-MAX_ENEMY_SHOTS: equ 2
+MAX_ENEMY_SHOTS: equ 3
 ENEMY_SHOT_SPEED: equ 2    ; Pixels per frame (slower than player)
 ENEMY_SHOT_WIDTH: equ 1
 ENEMY_SHOT_HEIGHT: equ 4
 ENEMY_SHOT_LIST_BASE: equ GAME_RAM_BASE + 210
+
+ENEMY_SHOT_FAMILY_ROLLING: equ 0
+ENEMY_SHOT_FAMILY_PLUNGER: equ 1
+ENEMY_SHOT_FAMILY_SQUIGGLY: equ 2
 
 ; Enemy shot object structure (same as player shot)
 ENEMY_SHOT_X: equ 0
@@ -102,9 +106,17 @@ ENEMY_SHOT_OBJ_SIZE: equ 4
 ; Enemy shot timing
 ENEMY_SHOT_COUNTER: equ GAME_RAM_BASE + 128
 ENEMY_SHOT_FIRE_DELAY: equ 60  ; Frames between fire attempts
+ENEMY_SHOT_SYNC_PHASE: equ GAME_RAM_BASE + 194 ; 0..2 scheduler phase (rolling/plunger/squiggly style interleave)
+ENEMY_SHOT_RELOAD_RATE: equ GAME_RAM_BASE + 195 ; Source-style dynamic reload value (currently scaffolded)
+ENEMY_SHOT_STEP_COUNTER_BASE: equ GAME_RAM_BASE + 196
+ENEMY_SHOT_ROLLING_STEPS: equ ENEMY_SHOT_STEP_COUNTER_BASE + 0
+ENEMY_SHOT_PLUNGER_STEPS: equ ENEMY_SHOT_STEP_COUNTER_BASE + 1
+ENEMY_SHOT_SQUIGGLY_STEPS: equ ENEMY_SHOT_STEP_COUNTER_BASE + 2
 
-; Enemy shot column-firing system
-ENEMY_SHOT_TABLE_PTR: equ GAME_RAM_BASE + 129  ; 2 bytes: pointer into firing table
+; Enemy shot family state
+ENEMY_SHOT_ROLLING_TABLE_PTR: equ GAME_RAM_BASE + 129   ; Placeholder until rolling uses player-column targeting
+ENEMY_SHOT_PLUNGER_TABLE_PTR: equ GAME_RAM_BASE + 131
+ENEMY_SHOT_SQUIGGLY_TABLE_PTR: equ GAME_RAM_BASE + 133
 
 ; ===== Shields (Protective Bases) =====
 SHIELD_COUNT: equ 4

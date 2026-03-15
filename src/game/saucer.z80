@@ -427,16 +427,20 @@ Saucer_Erase:
     ; Clear sprite area (8 rows, 2 bytes wide)
     ld b, SAUCER_HEIGHT
 Saucer_Erase_Loop:
+    ld a, h
+    cp 0x58
+    jr nc, Saucer_Erase_Done
     xor a
     ld (hl), a                      ; Clear first byte
     inc hl
     ld (hl), a                      ; Clear second byte
     dec hl
     
-    ; Move to next row (inc h works for 8 consecutive rows)
-    inc h
+    ; Move to next row in ZX bitmap layout
+    call Saucer_NextScanline
     
     djnz Saucer_Erase_Loop
+Saucer_Erase_Done:
 
     ret
 
@@ -487,6 +491,9 @@ Saucer_DrawScore:
 ; Outputs: None
 ; Destroys: AF, BC, DE, HL
 DrawSimpleSprite:
+    ld a, h
+    cp 0x58
+    jr nc, DrawSimpleSpriteDone
     ld a, (de)                      ; Get first byte
     ld (hl), a                      ; Write to screen
     inc hl
@@ -496,10 +503,28 @@ DrawSimpleSprite:
     dec hl                          ; Back to first column
     inc de
     
-    ; Move to next screen row (inc h works for 8 consecutive rows)
-    inc h
+    ; Move to next screen row in ZX bitmap layout
+    call Saucer_NextScanline
     
     djnz DrawSimpleSprite
+DrawSimpleSpriteDone:
+    ret
+
+Saucer_NextScanline:
+    ; Advance HL to next pixel row in ZX bitmap memory.
+    inc h
+    ld a, h
+    and 0x07
+    ret nz
+
+    ld a, l
+    add a, 0x20
+    ld l, a
+    ret c
+
+    ld a, h
+    sub 0x08
+    ld h, a
     ret
 
 ; ===================================================================

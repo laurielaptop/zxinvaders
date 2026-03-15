@@ -146,11 +146,15 @@ Shot_EraseMaskReady:
     ; Erase 4-pixel vertical line (only clear the shot bit)
     ld b, SHOT_HEIGHT
 Shot_ErasePixelLoop:
+    ld a, h
+    cp 0x58
+    jr nc, Shot_EraseDone
     ld a, (hl)
     and d
     ld (hl), a
-    inc h                   ; Move to next scan line
+    call Shot_NextScanline  ; Move to next scan line in ZX bitmap layout
     djnz Shot_ErasePixelLoop
+Shot_EraseDone:
     
 Shot_EraseNext:
     pop hl
@@ -204,11 +208,15 @@ Shot_DrawMaskReady:
 Shot_DrawPixels:
     ld b, SHOT_HEIGHT
 Shot_DrawPixelLoop:
+    ld a, h
+    cp 0x58
+    jr nc, Shot_DrawDone
     ld a, (hl)              ; Read current byte
     or d                    ; Set the shot pixel
     ld (hl), a              ; Write back
-    inc h                   ; Move to next scan line
+    call Shot_NextScanline  ; Move to next scan line in ZX bitmap layout
     djnz Shot_DrawPixelLoop
+Shot_DrawDone:
 
     ; Record last rendered Y for next frame erase
     pop hl
@@ -240,4 +248,21 @@ Shot_Reset:
     ld de, SHOT_OBJ_SIZE
     add hl, de              ; Move to next shot
     djnz .reset_loop
+    ret
+
+Shot_NextScanline:
+    ; Advance HL to next pixel row in ZX bitmap memory.
+    inc h
+    ld a, h
+    and 0x07
+    ret nz
+
+    ld a, l
+    add a, 0x20
+    ld l, a
+    ret c
+
+    ld a, h
+    sub 0x08
+    ld h, a
     ret

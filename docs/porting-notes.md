@@ -15,6 +15,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Player and alien explosion systems are implemented** (timed animation, hit-triggered state machines, and cleanup).
 - **Task 1 (lives + game-over/restart) is complete**: HUD lives digit renders correctly, lives decrement on hit, game-over mode triggers at zero lives, screen clears and "GAME OVER" banner is shown, and restart is available via fire key or auto-timeout (180 frames).
 - **Task 2 (wave-clear detection) is complete**: when all 55 aliens are killed, the screen clears and a full new wave spawns with shields regenerated and the formation starting 8 pixels lower each wave (cycling over 8 waves). Lives and score carry over. See `docs/wave-clear-logic.md`.
+- **Task 3 (enemy-shot families, Slices 1–3) is complete and gameplay-verified**: enemy fire is now split into three dedicated family slots (rolling/plunger/squiggly). Fire attempts are staggered round-robin by family, per-family step counters enforce spacing between shots, and score-based reload-rate gating is active using arcade-equivalent thresholds. Alien scoring now correctly updates the full 16-bit score total. Two regressions introduced during implementation were resolved: a stack-corruption blackout in `EnemyShot_TryFire` and a stack-leak rack-reset in `EnemyShot_Update`. Both are fixed and the game is stable. Remaining slices (plunger suppress, rolling targeting, squiggly table, sprites) are queued.
 - **Gameplay pacing has been tuned up slightly** for iteration: shorter main-loop wait (`Timing_WaitShort`) and faster player shot speed (`SHOT_SPEED=5`).
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 - **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
@@ -92,7 +93,15 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Intermittent random colored attribute squares still appear on screen in gameplay.**
    - Symptom: occasional non-gameplay color blocks appear in the bitmap/attribute area.
    - Current understanding: this indicates unintended writes into attribute memory (`0x5800-0x5AFF`).
-   - Status: unresolved; requires targeted instrumentation to isolate exact write path and frame context.
+   - Current primary suspect: legacy sprite scanline stepping using raw `inc h` in draw/erase loops.
+   - Progress (2026-03-15): player-shot and saucer draw/erase paths now use ZX-correct scanline stepping and include temporary bitmap write guards (`H < 0x58`).
+   - Status: partially mitigated; still unresolved until gameplay confirms no remaining attribute corruption.
+
+### Immediate Stabilization Plan (Short)
+1. Remove all remaining unsafe bitmap scanline stepping (`inc h`-only loops) from active gameplay render paths.
+2. Add temporary write guards/instrumentation to flag any attempted bitmap write where `HL >= 0x5800`.
+3. Re-verify wave transitions and player/enemy shot lifecycles under accelerated pacing (`Timing_WaitShort`, `SHOT_SPEED=5`).
+4. Once stable, continue with Task 3 (arcade-style enemy shot families).
 
 ### Gameplay Parity Gaps (Confirmed)
 - Saucer/UFO bonus target is now implemented (timed top-row flyby + score award based on arcade behavior, with timing currently calibrated for busy-wait frame pacing).
@@ -122,6 +131,14 @@ Target documents to produce/extend next:
 
 ### Remaining Steps
 1. **Task 3**: Expand enemy fire to arcade-like shot families (plunger, squiggly, rolling) and reload/timing parity (see `docs/enemy-fire-logic.md`).
+   - Source analysis refresh completed (2026-03-15): scheduler gating (`shotSync`), reload-rate lookup tables (`1CB8`/`1AA1`/`1AA5`), and plunger/squiggly table wrap points are now documented for implementation.
+   - Implementation slice 1 completed: scheduler/reload parity state scaffolding (`ENEMY_SHOT_SYNC_PHASE`, `ENEMY_SHOT_RELOAD_RATE`) added without changing current firing behavior.
+   - Implementation slice 2 completed: enemy-shot runtime is now split into three dedicated family slots with round-robin family selection, while projectile visuals and firing-source logic remain intentionally simplified.
+   - Implementation slice 3 completed: score-based reload-rate gating is now active using arcade-equivalent score thresholds, backed by per-family shot step counters and 16-bit alien score updates.
+   - Bug fix (2026-03-15): stack corruption in `EnemyShot_TryFire` — missing `push hl` before `call EnemyShot_PickAlienForFamily` caused a blackout/lockup ~6s into each game. Fixed.
+   - Bug fix (2026-03-15): stack leak in `EnemyShot_Update` — per-frame unbalanced push/pop for step-counter wiring caused all aliens to reset when any alien was hit. Rewrote update loop with clean balanced push/pop. Fixed.
+   - Slices 1–3 are now stable and gameplay-verified.
+   - Remaining: Slice 4 (plunger one-alien-left suppress), Slice 5 (rolling player-column targeting), Slice 6 (squiggly independent table), Slice 7 (sprite families).
 2. Resolve the **attribute-square known issue** (unexpected writes into attribute RAM during gameplay).
 3. Revisit/complete shields parity details (damage/collision behavior remains simplified).
 4. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.

@@ -360,11 +360,11 @@ Aliens_HitConsumeShot:
     ld hl, SHOT_LIST_BASE + SHOT_ACTIVE
     ld (hl), 0
 
-    ; Update score (low byte only for now)
-    ld hl, STATE_SCORE
-    ld a, (hl)
-    add a, 10
-    ld (hl), a
+    ; Update score as 16-bit binary total (+10 points per alien).
+    ld hl, (STATE_SCORE)
+    ld de, 10
+    add hl, de
+    ld (STATE_SCORE), hl
     ret
 
 Aliens_Move:

@@ -20,14 +20,27 @@ EnemyShot_InitLoop:
     ; Initialize fire counter
     xor a
     ld (ENEMY_SHOT_COUNTER), a
+
+    ; Initialize parity scaffolding state.
+    ld (ENEMY_SHOT_SYNC_PHASE), a
+    ld a, 0x30
+    ld (ENEMY_SHOT_RELOAD_RATE), a
+
+    xor a
+    ld (ENEMY_SHOT_ROLLING_STEPS), a
+    ld (ENEMY_SHOT_PLUNGER_STEPS), a
+    ld (ENEMY_SHOT_SQUIGGLY_STEPS), a
     
-    ; Initialize column-firing table pointer
+    ; Initialize family firing-table pointers.
     ld hl, EnemyShot_ColumnTable
-    ld (ENEMY_SHOT_TABLE_PTR), hl
+    ld (ENEMY_SHOT_ROLLING_TABLE_PTR), hl
+    ld (ENEMY_SHOT_PLUNGER_TABLE_PTR), hl
+    ld (ENEMY_SHOT_SQUIGGLY_TABLE_PTR), hl
     ret
 
 EnemyShot_TryFire:
     ; Periodically try to spawn enemy shot from random alien
+    call EnemyShot_UpdateParityState
     
     ; Check fire counter
     ld hl, ENEMY_SHOT_COUNTER
@@ -37,32 +50,38 @@ EnemyShot_TryFire:
     ret c                        ; Not time yet
     ld (hl), 0                   ; Reset counter
     
+    ; Select which family gets the next fire attempt.
+    ld a, (ENEMY_SHOT_SYNC_PHASE)
+    push af
+    call EnemyShot_SelectFamilySlot
+    call EnemyShot_AdvanceSyncPhase
+
     call Debug_ShowFireAttempt   ; DEBUG: Show we're trying to fire
-    
-    ; Find an available shot slot
-    ld hl, ENEMY_SHOT_LIST_BASE
-    ld b, MAX_ENEMY_SHOTS
-EnemyShot_FindSlot:
+
+    ; Only this family's dedicated slot may be used.
     push hl
-    push bc
-    ld bc, ENEMY_SHOT_ACTIVE
-    add hl, bc
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de
     ld a, (hl)
-    pop bc
     pop hl
     or a
-    jr z, EnemyShot_FoundSlot   ; Found inactive slot
-    ld de, ENEMY_SHOT_OBJ_SIZE
-    add hl, de
-    djnz EnemyShot_FindSlot
-    ret                          ; No slots available
-    
-EnemyShot_FoundSlot:
-    ; HL points to available slot
-    push hl                      ; Save slot pointer
-    
-    ; Pick a random alive alien
-    call EnemyShot_PickAlien
+    pop af
+    ret nz                       ; Family slot already active
+
+    push af
+    push hl
+    call EnemyShot_IsFireAllowedForFamily
+    pop hl
+    or a
+    jr nz, .fire_allowed
+    pop af
+    ret
+.fire_allowed:
+    pop af
+
+    ; Pick a spawn source for the selected family.
+    push hl
+    call EnemyShot_PickAlienForFamily
     or a                         ; Check if alien found
     pop hl
     ret z                        ; No aliens alive
@@ -81,16 +100,236 @@ EnemyShot_FoundSlot:
     ld (hl), d                   ; PREV_Y = Y
     inc hl
     ld (hl), 1                   ; ACTIVE = 1
+
+    ; This family has taken its first step.
+    push hl
+    call EnemyShot_GetStepCounterPtrForFamily
+    ld (hl), 1
+    pop hl
     
     call Debug_ShowShotCreated   ; DEBUG: Show shot was created
     ret
 
-EnemyShot_PickAlien:
+EnemyShot_UpdateParityState:
+    ; Keep source-parity scheduler/reload state updated.
+    ; Current implementation records reload state only; fire timing still uses
+    ; ENEMY_SHOT_FIRE_DELAY until source-style reload gating is fully integrated.
+
+    ; Derive reload-rate bucket from equivalent score breakpoints.
+    ; The original uses score-MSB descriptor thresholds; this port stores
+    ; score as a 16-bit binary total, so compare against the same point values.
+    ld hl, (STATE_SCORE)
+    call EnemyShot_CalcReloadRate
+    ld (ENEMY_SHOT_RELOAD_RATE), a
+    ret
+
+EnemyShot_CalcReloadRate:
+    ; Input: HL = current 16-bit binary score
+    ; Output: A = reload-rate value
+    ; Thresholds preserve original behavior:
+    ; <= 200 -> 0x30, <= 1000 -> 0x10, <= 2000 -> 0x0B,
+    ; <= 3000 -> 0x08, > 3000 -> 0x07.
+    ld de, 201
+    call EnemyShot_IsScoreBelowDE
+    jr c, .rate30
+
+    ld de, 1001
+    call EnemyShot_IsScoreBelowDE
+    jr c, .rate10
+
+    ld de, 2001
+    call EnemyShot_IsScoreBelowDE
+    jr c, .rate0b
+
+    ld de, 3001
+    call EnemyShot_IsScoreBelowDE
+    jr c, .rate08
+
+    ld a, 0x07
+    ret
+.rate30:
+    ld a, 0x30
+    ret
+.rate10:
+    ld a, 0x10
+    ret
+.rate0b:
+    ld a, 0x0B
+    ret
+.rate08:
+    ld a, 0x08
+    ret
+
+EnemyShot_IsScoreBelowDE:
+    ; Input: HL = score, DE = exclusive upper bound
+    ; Output: Carry set if HL < DE, clear otherwise.
+    ld a, h
+    cp d
+    jr c, .below
+    jr nz, .not_below
+    ld a, l
+    cp e
+    jr c, .below
+.not_below:
+    or a
+    ret
+.below:
+    scf
+    ret
+
+EnemyShot_IsFireAllowedForFamily:
+    ; Input: A = family id
+    ; Output: A = 1 if allowed, A = 0 if blocked by reload spacing
+    ld b, a
+    call EnemyShot_GetReloadGuard1ForFamily
+    call EnemyShot_CheckReloadGuardValue
+    ret z
+
+    ld a, b
+    call EnemyShot_GetReloadGuard2ForFamily
+    call EnemyShot_CheckReloadGuardValue
+    ret z
+
+    ld a, 1
+    ret
+
+EnemyShot_CheckReloadGuardValue:
+    ; Input: A = other-shot step count
+    ; Output: A = 1 if allowed, A = 0 if blocked
+    or a
+    jr z, .allow
+    ld b, a
+    ld a, (ENEMY_SHOT_RELOAD_RATE)
+    cp b
+    jr nc, .block
+.allow:
+    ld a, 1
+    ret
+.block:
+    xor a
+    ret
+
+EnemyShot_GetReloadGuard1ForFamily:
+    ; Input: A = family id
+    ; Output: A = first other-shot step count
+    cp ENEMY_SHOT_FAMILY_PLUNGER
+    jr z, .guard1_plunger
+    cp ENEMY_SHOT_FAMILY_SQUIGGLY
+    jr z, .guard1_squiggly
+    ld a, (ENEMY_SHOT_PLUNGER_STEPS)
+    ret
+.guard1_plunger:
+    ld a, (ENEMY_SHOT_ROLLING_STEPS)
+    ret
+.guard1_squiggly:
+    ld a, (ENEMY_SHOT_PLUNGER_STEPS)
+    ret
+
+EnemyShot_GetReloadGuard2ForFamily:
+    ; Input: A = family id
+    ; Output: A = second other-shot step count
+    cp ENEMY_SHOT_FAMILY_PLUNGER
+    jr z, .guard2_plunger
+    cp ENEMY_SHOT_FAMILY_SQUIGGLY
+    jr z, .guard2_squiggly
+    ld a, (ENEMY_SHOT_SQUIGGLY_STEPS)
+    ret
+.guard2_plunger:
+    ld a, (ENEMY_SHOT_SQUIGGLY_STEPS)
+    ret
+.guard2_squiggly:
+    ld a, (ENEMY_SHOT_ROLLING_STEPS)
+    ret
+
+EnemyShot_GetStepCounterPtrForFamily:
+    ; Input: A = family id
+    ; Output: HL = step counter byte for that family
+    ld hl, ENEMY_SHOT_STEP_COUNTER_BASE
+    or a
+    ret z
+    inc hl
+    cp ENEMY_SHOT_FAMILY_PLUNGER
+    ret z
+    inc hl
+    ret
+
+EnemyShot_GetStepCounterPtrForSlot:
+    ; Input: HL = shot slot base
+    ; Output: DE = step counter byte for that slot's family
+    ld de, ENEMY_SHOT_STEP_COUNTER_BASE
+    ld a, l
+    cp LOW(ENEMY_SHOT_LIST_BASE + ENEMY_SHOT_OBJ_SIZE)
+    ret c
+    inc de
+    cp LOW(ENEMY_SHOT_LIST_BASE + (ENEMY_SHOT_OBJ_SIZE * 2))
+    ret c
+    inc de
+    ret
+
+EnemyShot_ClearStepCounterForSlot:
+    ; Input: HL = shot slot base
+    push de
+    call EnemyShot_GetStepCounterPtrForSlot
+    xor a
+    ld (de), a
+    pop de
+    ret
+
+EnemyShot_AdvanceSyncPhase:
+    ld a, (ENEMY_SHOT_SYNC_PHASE)
+    inc a
+    cp 3
+    jr c, .phase_store
+    xor a
+.phase_store:
+    ld (ENEMY_SHOT_SYNC_PHASE), a
+    ret
+
+EnemyShot_SelectFamilySlot:
+    ; Input: A = family id (0 rolling, 1 plunger, 2 squiggly)
+    ; Output: HL = dedicated shot slot base
+    ld hl, ENEMY_SHOT_LIST_BASE
+    or a
+    ret z
+    ld de, ENEMY_SHOT_OBJ_SIZE
+    add hl, de
+    cp ENEMY_SHOT_FAMILY_PLUNGER
+    ret z
+    add hl, de
+    ret
+
+EnemyShot_PickAlienForFamily:
+    ; Input: A = family id
+    ; Output: B = X, D = Y, A = 1 on success; A = 0 on failure
+    cp ENEMY_SHOT_FAMILY_PLUNGER
+    jr z, EnemyShot_PickAlienPlunger
+    cp ENEMY_SHOT_FAMILY_SQUIGGLY
+    jr z, EnemyShot_PickAlienSquiggly
+    jr EnemyShot_PickAlienRolling
+
+EnemyShot_PickAlienRolling:
+    ; Placeholder for upcoming player-column targeting slice.
+    ld de, ENEMY_SHOT_ROLLING_TABLE_PTR
+    jr EnemyShot_PickAlienFromTablePtr
+
+EnemyShot_PickAlienPlunger:
+    ld de, ENEMY_SHOT_PLUNGER_TABLE_PTR
+    jr EnemyShot_PickAlienFromTablePtr
+
+EnemyShot_PickAlienSquiggly:
+    ld de, ENEMY_SHOT_SQUIGGLY_TABLE_PTR
+    jr EnemyShot_PickAlienFromTablePtr
+
+EnemyShot_PickAlienFromTablePtr:
     ; Use column-firing table to pick a column, then find lowest alive alien in that column.
     ; Returns: B = X, D = Y, A = 1 on success. A = 0 if none found.
 
     ; Get next column from table (stored as 1..11), convert to 0..10 in C.
-    ld hl, (ENEMY_SHOT_TABLE_PTR)
+    ld a, (de)
+    ld l, a
+    inc de
+    ld a, (de)
+    ld h, a
     ld a, (hl)
     dec a
     ld c, a
@@ -105,7 +344,12 @@ EnemyShot_PickAlien:
     jr nz, EnemyShot_TablePtrOK
     ld hl, EnemyShot_ColumnTable
 EnemyShot_TablePtrOK:
-    ld (ENEMY_SHOT_TABLE_PTR), hl
+    dec de
+    ld a, l
+    ld (de), a
+    inc de
+    ld a, h
+    ld (de), a
 
     ; HL = pointer to bottom row, selected column.
     ld hl, ALIEN_GRID_BASE + ((ALIEN_ROWS - 1) * ALIEN_COLS)
@@ -180,10 +424,10 @@ EnemyShot_Update:
 EnemyShot_UpdateLoop:
     push hl
     push bc
-    
+
     ; Check if active
-    ld bc, ENEMY_SHOT_ACTIVE
-    add hl, bc
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de
     ld a, (hl)
     pop bc
     pop hl
@@ -192,29 +436,38 @@ EnemyShot_UpdateLoop:
     
     ; Move shot downward
     push hl
-    inc hl                        ; Point to Y
+    inc hl                       ; Point to Y
     ld a, (hl)
     add a, ENEMY_SHOT_SPEED
     ld (hl), a
+    ld c, a                      ; Keep updated Y for bounds check
+    pop hl
+
+    ; Increment this family's shot step counter.
+    push hl
+    call EnemyShot_GetStepCounterPtrForSlot
+    ld a, (de)
+    inc a
+    ld (de), a
+    pop hl
     
     ; Check if shot top has moved past last safe draw position.
     ; For 4px tall sprite on 0..191 screen, max safe top Y is 188.
+    ld a, c
     cp 192 - ENEMY_SHOT_HEIGHT + 1
     jr c, EnemyShot_UpdateOK
     
     ; Deactivate and clear PREV_Y marker
-    pop hl
-    push hl
     ld de, ENEMY_SHOT_ACTIVE
     add hl, de
     xor a
     ld (hl), a
     dec hl
     ld (hl), a
+    dec hl                       ; Restore HL to slot base
+    call EnemyShot_ClearStepCounterForSlot
     
 EnemyShot_UpdateOK:
-    pop hl
-    
 EnemyShot_UpdateNext:
     ld de, ENEMY_SHOT_OBJ_SIZE
     add hl, de
@@ -298,6 +551,9 @@ EnemyShot_CheckLoop:
     dec hl
     ld (hl), a
     pop hl
+    push hl
+    call EnemyShot_ClearStepCounterForSlot
+    pop hl
     
     ; Trigger player explosion
     call PlayerHit_OnHit
@@ -312,6 +568,9 @@ EnemyShot_AlreadyExploding:
     ld (hl), a
     dec hl
     ld (hl), a
+    pop hl
+    push hl
+    call EnemyShot_ClearStepCounterForSlot
     pop hl
     jr EnemyShot_CheckNext
     
@@ -485,4 +744,8 @@ EnemyShot_Reset:
     ld de, ENEMY_SHOT_OBJ_SIZE
     add hl, de              ; Move to next shot
     djnz .reset_loop
+    xor a
+    ld (ENEMY_SHOT_ROLLING_STEPS), a
+    ld (ENEMY_SHOT_PLUNGER_STEPS), a
+    ld (ENEMY_SHOT_SQUIGGLY_STEPS), a
     ret

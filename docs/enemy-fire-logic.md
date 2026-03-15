@@ -61,6 +61,19 @@ ResetShot:
 04B3: C3 32 1A        JP      BlockCopy           ; ... from ROM mirror and out
 ```
 
+## Verified Scheduler Behavior (Source Refresh, 2026-03-15)
+
+The original does not fire all alien shots every tick. It gates each shot family
+through ISR timing and a shared sync byte:
+
+1. In the ISR game-play loop, `obj2TimerExtra` is copied into `shotSync` (`0072..0075`).
+2. `GameObj2` (rolling shot) runs on its own timer cadence and also refreshes that timer from mirror data (`0477..047A`).
+3. `GameObj3` (plunger) only proceeds when `shotSync == 1` (`04BC..04C1`).
+4. `GameObj4` (squiggly/saucer task) only proceeds when `shotSync == 2` (`0683..0688`).
+5. This creates a staggered schedule where shot families are naturally interleaved instead of burst-firing together.
+
+Practical parity rule for ZX: preserve staggered family scheduling semantics, even if implementation uses frame phases instead of ISR scanline slices.
+
 ## HandleAlienShot Function (0x0563)
 
 ```asm
@@ -190,12 +203,31 @@ otherShot1/2 (0x2070/0x2071) - Step counts from other two shots
 - If either `otherShot` step count < reload rate → don't fire
 - Creates spacing between shots based on game difficulty
 
+Source table details (`AShotReloadRate` at `170E`):
+- Score-MSB thresholds table (`1CB8`): `02, 10, 20, 30`
+- Reload-rate table (`1AA1` + final at `1AA5`): `30, 10, 0B, 08, 07`
+- Meaning: higher score -> smaller reload value -> faster alien firing.
+
+ZX adaptation note:
+- The current port stores score as a 16-bit binary total, not the arcade score-byte descriptor format.
+- To preserve gameplay behavior, reload-rate gating should compare against equivalent score breakpoints:
+   - `<= 200` -> `0x30`
+   - `<= 1000` -> `0x10`
+   - `<= 2000` -> `0x0B`
+   - `<= 3000` -> `0x08`
+   - `> 3000` -> `0x07`
+- This keeps the original difficulty curve even though the underlying score representation differs.
+
 ### 4. Column-Firing Tables
 Each non-tracking shot has a firing column table:
 - Plunger: 16 entries starting at ROM address determined by `$1B48`
 - Squiggly: 21 entries starting at ROM address determined by `$1B58`
 - Tables wrap around when exhausted
 - Each entry specifies which column (0-10) should fire next
+
+Wrap points are explicit in code:
+- Plunger wraps when pointer LSB reaches `0x10` (`04D9..04E4`).
+- Squiggly wraps when pointer LSB reaches `0x15` (`0526..0531`).
 
 ### 5. Shot Selection Algorithm
 For column-based shots:
@@ -270,15 +302,15 @@ EnemyShot_PickAlien:
 
 ### Differences from Original
 
-| Feature | Original Arcade | ZX Spectrum Port |
-|---------|----------------|------------------|
-| Shot types | 3 (rolling, plunger, squiggly) | 1 (straight drop) |
-| Synchronization | Timer cycle 0→1→2, ISR-based | Simple frame counter |
-| Reload rate | Score-based dynamic rate | Fixed 60-frame delay |
-| Column tables | Two tables, 16/21 entries | One table, 16 entries |
-| Alien selection | FindInColumn per shot type | Single FindInColumn |
-| Animation | 4-frame sprite cycles | Static single pixel |
-| Max shots | 3 (one per type) | 2 (simplified) |
+| Feature | Original Arcade | ZX Spectrum Port (current) |
+|---------|----------------|----------------------------|
+| Shot types | 3 (rolling, plunger, squiggly) | 3 dedicated family slots ✅ |
+| Synchronization | Timer cycle 0→1→2, ISR-based | Round-robin phase + step-counter spacing ✅ |
+| Reload rate | Score-based dynamic rate | Score-based (16-bit threshold) ✅ |
+| Column tables | Two tables, 16/21 entries | One shared 16-entry table (squiggly pending) |
+| Alien selection | FindInColumn per shot type | Shared FindInColumn (rolling targeting pending) |
+| Animation | 4-frame sprite cycles | Static single pixel (sprite families pending) |
+| Max shots | 3 (one per type) | 3 (one per family slot) ✅ |
 
 ### Development Debug Visualizer
 
@@ -312,12 +344,59 @@ Important implementation note:
   `Debug_ShowFireCounter` must preserve `A`, because `EnemyShot_TryFire` compares
   `A` against `ENEMY_SHOT_FIRE_DELAY` immediately after the debug call.
 
-### Future Enhancements
-1. **Add additional shot types** for variety (zigzag, animated sprites)
-2. **Implement targeting shot** that aims at player position
-3. **Add reload rate** based on score (difficulty scaling)
-4. **Four-frame sprite animation** to match arcade visual style
-5. **Increase max shots** to 3 when adding multiple types
+### Remaining Enhancements (Slices 4–7)
+1. **Slice 4**: Plunger one-alien-left suppression (when `ALIEN_COUNT_REMAINING <= 1`, plunger family does not fire)
+2. **Slice 5**: Rolling shot player-column targeting (`FindColumn` equivalent using `PLAYER_X`)
+3. **Slice 6**: Squiggly independent 21-entry column table with its own pointer/wrap
+4. **Slice 7**: Four-frame sprite animation per family to match arcade visual style
+
+## Task 3 Source-First Implementation Contract (Do This Order)
+
+Before code changes, keep this sequence strict:
+
+1. Document complete RAM/state mapping for three ZX shot-family slots (rolling, plunger, squiggly equivalents).
+2. Document ZX scheduler mapping for `shotSync`-style interleaving (which frame phases map to 0/1/2).
+3. Document reload-rate lookup contract using source tables (`1CB8`, `1AA1`, `1AA5`) and score-MSB extraction rule.
+4. Document per-family firing source:
+   - Rolling: player-column targeting via `FindColumn` equivalent.
+   - Plunger: column table + one-alien-left disable.
+   - Squiggly: column table + independent pointer/wrap.
+5. Only after 1-4, implement code in small validated slices.
+
+Recommended code slices after docs are frozen:
+
+1. Add RAM/constants and scheduler scaffolding (no gameplay change yet).
+2. Split current enemy-shot module into three family state slots while preserving current visuals.
+3. Add score-based reload-rate gate.
+4. Add plunger one-alien-left suppression.
+5. Add rolling player-column targeting.
+6. Add squiggly independent table pointer and wrap behavior.
+7. Finally add sprite-family visual/animation parity.
+
+Progress note (2026-03-15):
+- Slice 1 is now started in code.
+- ZX now tracks a `shotSync`-style scheduler phase (`0..2`) and maintains source-table-derived reload-rate state.
+- Fire behavior is intentionally unchanged for now; these values are recorded and validated before being used to gate firing.
+
+Additional progress note (2026-03-15):
+- Slice 2 is now in place in code.
+- Enemy-shot runtime is split into three dedicated family slots (rolling, plunger, squiggly equivalents).
+- Fire attempts are assigned round-robin by family slot, preserving simple projectile visuals for now.
+- Rolling/plunger/squiggly firing-source behavior is still intentionally simplified until the next slices wire in player-column targeting, plunger suppression, and independent table behavior.
+
+Additional progress note (2026-03-15, Slice 3):
+- Score-based reload-rate gating is now live.
+- The ZX port compares the 16-bit binary total score against the documented arcade-equivalent breakpoints (`200`, `1000`, `2000`, `3000`).
+- Each family now maintains a step counter so fire attempts can be blocked when another family shot has not progressed far enough, matching the original spacing rule more closely.
+- Alien score increments now update the full 16-bit score total rather than only the low byte, so reload thresholds are reachable during normal play.
+
+Bug fix note (2026-03-15, post-Slice 2):
+- **Blackout/lockup ~6s in**: `EnemyShot_TryFire` called `EnemyShot_PickAlienForFamily` without first pushing HL. The subsequent unconditional `pop hl` popped the return address off the stack, corrupting control flow once the first alien shot would have fired. Fixed by adding `push hl` before the call.
+
+Bug fix note (2026-03-15, post-Slice 3):
+- **All aliens resetting on single alien hit**: `EnemyShot_Update` leaked one stack entry per active enemy shot per frame due to an unbalanced push/pop in the step-counter wiring. Over many frames this corrupted SP enough that the return from alien-hit handling landed inside `Aliens_NewWave`, resetting the entire rack. Fixed by rewriting the update loop with strictly balanced push/pop pairs and using `ld c, a` to preserve the updated Y value instead of an extra push.
+- Slices 1–3 are now stable and gameplay-verified (2026-03-15).
+
 6. **Sync with ISR** to match arcade timing precision
 
 ## Constants from Original
