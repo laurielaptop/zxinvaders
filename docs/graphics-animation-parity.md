@@ -228,8 +228,10 @@ Reference:
 - `src/game/aliens.z80:393`
 
 ### 3.3 Saucer
-- Current: simplified 16x8 art.
-- Needed: use canonical saucer and explosion source data, with agreed ZX-height adaptation.
+- Current: saucer and saucer-explosion art now use ROM-derived source bytes from `resources/source.z80:1D64` and `resources/source.z80:1D7C`, adapted as 24x8 sprites for the current ZX renderer.
+- Motion now uses shifted drawing for 1-pixel horizontal movement rather than byte-step movement.
+- Temporary dev hook: `H` simulates a saucer hit while the saucer is flying so the explosion/score path can be tested quickly.
+- Remaining gap: score text uses the existing HUD digit font rather than source-matched saucer score glyphs.
 
 Reference:
 - `src/game/saucer.z80:511`
@@ -248,6 +250,7 @@ Reference:
   - player shot sprite/explosion parity
   - 3 alien shot families with independent frame tables and frame cycling
   - family-specific render assets (rolling/plunger/squiggly)
+  - continued late-wave validation that shot source selection only uses live visible aliens
 
 References:
 - `src/game/shot.z80:158`

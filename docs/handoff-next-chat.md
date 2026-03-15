@@ -17,7 +17,7 @@ Player sprite parity is now complete. This handoff captures the verified end sta
 
 ## Highest-value remaining work
 1. Continue monitoring the historical attribute-memory corruption issue; it was not reproduced during the latest player-parity and shield-art session.
-2. Replace remaining placeholder shot/saucer graphics with source-derived monochrome sprite tables and complete shield degradation parity.
+2. Replace remaining placeholder shot graphics with source-derived monochrome sprite tables and complete shield degradation parity.
 3. Tighten enemy-shot parity from functional to visual/timing polish (source-matched shot art, ISR-timed precision later).
 
 ## Important technical facts confirmed
@@ -25,9 +25,10 @@ Player sprite parity is now complete. This handoff captures the verified end sta
 2. `Player_NextScanline` / `PlayerHit_NextScanline` fixes are required to avoid attribute RAM spill during tall sprite stepping.
 3. Player parity is solved; do not reopen table-orientation experiments unless new evidence appears.
 4. Shields now use source-derived intact art; remaining shield work is degradation/collision parity.
+5. Saucer visuals now use ROM-derived ship/explosion art with shifted 1-pixel movement; temporary `H` key hit simulation exists for development-only testing.
 
 ## Recommended next chat focus
-Continue with source-derived shot or saucer graphics, while keeping an eye out for any recurrence of attribute-memory corruption during testing.
+Continue with source-derived shot graphics and shield degradation work, while keeping an eye out for any recurrence of attribute-memory corruption during testing.
 
 ## Suggested first prompt for the new chat
-"Use `docs/handoff-next-chat.md` as the starting context. Player sprite parity is complete and intact shield art is now ROM-derived; continue with source-derived shot or saucer graphics and keep monitoring for any attribute-memory corruption recurrence." 
+"Use `docs/handoff-next-chat.md` as the starting context. Player sprite parity, shield intact art, and saucer visuals are now locked; continue with source-derived shot graphics and shield degradation while monitoring for any attribute-memory corruption recurrence." 

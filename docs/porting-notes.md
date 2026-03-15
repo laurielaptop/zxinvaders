@@ -21,6 +21,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Player sprite corruption root cause identified**: `Player_Draw` was clobbering the sprite-table pointer by reusing `DE` for both pointer state and row bytes, producing random dot/line output regardless of table choice. The draw path now keeps the pointer separate.
 - **Player sprite parity is now complete**: the final player sprite is locked to the ROM-derived `PlayerSprite` data from `resources/source.z80:1C60`, using the `rot90cw` transform for the current ZX renderer.
 - **Shield intact-art parity is now locked**: shields draw from ROM-derived `ShieldImage` data (`resources/source.z80:1D20`) adapted to the current 24x16 ZX renderer and validated in emulator. Damage/degradation logic is still simplified.
+- **Saucer visual parity is now substantially improved**: saucer and explosion art are ROM-derived, movement is now 1-pixel smooth via shifted drawing, and a temporary `H` dev trigger exists to exercise the hit path during this development cycle.
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 - **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
 - **Alien sprite parity is complete** (ROM-derived A/B/C row families, 2-frame animation, deterministic transform pipeline).
@@ -107,12 +108,14 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 
 ### Gameplay Parity Gaps (Confirmed)
 - Saucer/UFO bonus target is now implemented (timed top-row flyby + score award based on arcade behavior, with timing currently calibrated for busy-wait frame pacing).
+- Saucer visuals now use ROM-derived ship/explosion sprites with shifted smooth movement; only score-glyph parity remains simplified.
 - Alien shot system now implements three-family scheduling and gameplay behavior, but still uses simplified pixel art rather than fully source-matched shot sprites.
 - Alien rendering now uses row-specific arcade-derived sprite families and frame toggling.
 - Player sprite now matches the original silhouette in-game using ROM-derived data with the locked `rot90cw` transform.
 - Shields now use ROM-derived intact artwork, but shield damage/collision degradation remains simplified.
 - Sprite source mapping and render/animation behavior are now documented in `docs/graphics-animation-parity.md`.
 - Explosion animation parity is partial: player and alien explosions are in place; remaining parity gaps are secondary shot/saucer side-effect details.
+- Late-wave bug fix (2026-03-15): exploding aliens are now removed from the live grid immediately so enemy shots cannot appear to fire from empty space.
 
 ### Source-First Rule For Remaining Features
 For each missing gameplay element, we must complete a short 8080 behavior note before writing ZX code:
@@ -149,7 +152,7 @@ Target documents to produce/extend next:
 2. Continue monitoring the **attribute-square issue** across repeated gameplay sessions; it was not reproduced during the current player-parity and shield-art work.
 3. Revisit/complete shields parity details (damage/collision behavior remains simplified).
 4. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.
-5. Replace remaining placeholder saucer/shot graphics with source-derived monochrome sprite tables.
+5. Replace remaining placeholder shot graphics with source-derived monochrome sprite tables.
 6. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
 7. End-phase optimization: ISR-synchronized rendering to reduce flicker.
 8. Audio pass: fire, hit, and alien movement sound effects.

@@ -21,6 +21,16 @@ AlienHit_OnHit:
     ret
 
 AlienHit_OnHitStart:
+    ; Mark the alien dead in the live grid immediately so selection logic
+    ; cannot still target it while the explosion animation is running.
+    ld hl, ALIEN_GRID_BASE
+    add hl, de
+    ld (hl), 0
+
+    ; Decrement remaining alien count now so late-wave logic matches visuals.
+    ld hl, ALIEN_COUNT_REMAINING
+    dec (hl)
+
     
     ; Save explosion position
     ld a, b
@@ -59,18 +69,6 @@ AlienHit_Update:
     ; Timer expired - end explosion
     ld hl, GAME_RAM_BASE + ALIEN_EXPLODING
     ld (hl), 0xFF           ; Mark explosion complete
-    
-    ; Actually kill the alien now (set grid flag to 0)
-    ld a, (GAME_RAM_BASE + ALIEN_EXPLOSION_INDEX)
-    ld e, a
-    ld d, 0
-    ld hl, ALIEN_GRID_BASE
-    add hl, de
-    ld (hl), 0              ; Mark alien dead in grid
-
-    ; Decrement remaining alien count for wave-clear detection
-    ld hl, ALIEN_COUNT_REMAINING
-    dec (hl)
 
     ret
 

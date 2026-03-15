@@ -16,6 +16,7 @@ Saucer_Init:
     ; Set initial inactive state
     xor a
     ld (SAUCER_STATE), a           ; State = 0 (inactive)
+    ld (SAUCER_DEV_HIT_LATCH), a
     
     ; Initialize countdown timer from SAUCER_INIT_DELAY
     ld hl, SAUCER_INIT_DELAY
@@ -127,13 +128,6 @@ Saucer_Activate_Done:
 ; Flying state: Move saucer, check boundaries, check hits
 ; -------------------------------------------------------------------
 Saucer_Update_Flying:
-    ; Erase saucer at previous position
-    call Saucer_Erase
-    
-    ; Save current X as previous
-    ld a, (SAUCER_X)
-    ld (SAUCER_PREV_X), a
-    
     ; Move saucer
     ld a, (SAUCER_DX)              ; Get delta
     ld b, a                         ; Save delta
@@ -154,18 +148,20 @@ Saucer_CheckRight:
     jr Saucer_CheckCollision
     
 Saucer_CheckLeft:
-    ; Moving left - check left boundary (with underflow)
+    ; Moving left - underflow wraps to 255, which is safely above max bound.
     ld a, (SAUCER_X)
-    cp SAUCER_MIN_X + 16            ; Add margin for signed comparison
-    jp c, Saucer_Deactivate         ; Past boundary, remove
+    cp SAUCER_MAX_X + 1
+    jp nc, Saucer_Deactivate        ; Wrapped/off-screen, remove
     
 Saucer_CheckCollision:
     ; Check for player shot collision
     call Saucer_CheckHit
     jr c, Saucer_WasHit             ; Carry set = hit
+
+    ; Dev-only shortcut: H key simulates a hit while the saucer is flying.
+    call Saucer_CheckDebugHit
+    jr c, Saucer_WasHit
     
-    ; Draw saucer at new position
-    call Saucer_Draw
     ret
 
 Saucer_WasHit:
@@ -191,8 +187,6 @@ Saucer_WasHit:
 ; Outputs: None
 ; Destroys: AF
 Saucer_Deactivate:
-    call Saucer_Erase
-    
     xor a
     ld (SAUCER_STATE), a            ; State = 0 (inactive)
     
@@ -208,20 +202,21 @@ Saucer_Update_Hit:
     ld a, (SAUCER_HIT_TIMER)
     dec a
     ld (SAUCER_HIT_TIMER), a
-    
-    ; Check if timer just started (first frame)
-    cp SAUCER_HIT_DURATION - 1
-    jr z, Saucer_ShowExplosion
-    
-    ; Check if time to show score
-    cp SAUCER_SCORE_DISPLAY_FRAME
-    jr z, Saucer_ShowScore
-    
+
     ; Check if timer expired
     or a
     jr z, Saucer_FinishExplosion
-    
-    ret
+
+    ; Explosion phase lasts until the score-display frame is reached.
+    cp SAUCER_SCORE_DISPLAY_FRAME + 1
+    jr nc, Saucer_ShowExplosion
+
+    ; Award the saucer score once, when entering score-display phase.
+    cp SAUCER_SCORE_DISPLAY_FRAME
+    call z, Saucer_AddScore
+
+    ; Keep the score visible for the remainder of the hit timer.
+    jp Saucer_DrawScore
 
 Saucer_ShowExplosion:
     ; Draw explosion sprite
@@ -229,13 +224,9 @@ Saucer_ShowExplosion:
     ret
 
 Saucer_ShowScore:
-    ; Erase explosion, draw score value
-    call Saucer_Erase
-    call Saucer_DrawScore
-    
-    ; Add score to player's total
-    call Saucer_AddScore
-    ret
+    ; Retained for compatibility with older flow; score is now redrawn every
+    ; frame during the score phase from Saucer_Update_Hit.
+    jp Saucer_DrawScore
 
 Saucer_FinishExplosion:
     ; Clean up and deactivate
@@ -298,6 +289,37 @@ Saucer_CheckHit:
 Saucer_NoHit:
     ; Clear carry flag to indicate no hit
     or a                            ; Clear carry
+    ret
+
+; ===================================================================
+; Saucer_CheckDebugHit
+; ===================================================================
+; Temporary development helper: pressing H while the saucer is flying
+; simulates a successful hit using the normal hit/explosion path.
+; Outputs: Carry set on new press, clear otherwise.
+Saucer_CheckDebugHit:
+    ld a, 191                       ; BFFE row: Enter/L/K/J/H
+    in a, (254)
+    bit 4, a                        ; H key active low
+    jr nz, Saucer_DebugHitReleased
+
+    ld a, (SAUCER_DEV_HIT_LATCH)
+    or a
+    jr nz, Saucer_NoHit
+
+    inc a
+    ld (SAUCER_DEV_HIT_LATCH), a
+
+    ; Ensure any active shot is cleared so the simulated hit uses the same
+    ; post-hit state as a real collision.
+    xor a
+    ld (SHOT_LIST_BASE + SHOT_ACTIVE), a
+    scf
+    ret
+
+Saucer_DebugHitReleased:
+    xor a
+    ld (SAUCER_DEV_HIT_LATCH), a
     ret
 
 ; ===================================================================
@@ -383,10 +405,10 @@ Saucer_AddScore:
 ; Outputs: None
 ; Destroys: AF, BC, DE, HL
 Saucer_Draw:
-    ; Only draw if saucer is active
+    ; Only draw the ship while it is actively flying.
     ld a, (SAUCER_STATE)
-    or a                            ; State = 0 (inactive)?
-    ret z                           ; Yes, don't draw
+    cp 1
+    ret nz
     
     ; Get position and calculate screen address
     ld a, (SAUCER_X)                ; A = X coordinate
@@ -396,10 +418,19 @@ Saucer_Draw:
     ld a, b
     call Video_CalcAddress          ; Returns HL = screen address
     
-    ; Draw sprite
-    ld de, SaucerSprite
-    ld b, SAUCER_HEIGHT             ; 8 rows
-    call DrawSimpleSprite           ; Assumes this routine exists
+    ; Horizontal bit offset inside the target byte (0..7)
+    ld a, b
+    and 0x07
+    ld c, a
+
+    ; Draw ROM-derived shifted 24x8 sprite.
+    ld ix, SaucerSprite
+    ld b, SAUCER_HEIGHT
+    call Saucer_DrawShifted24Sprite
+
+    ; Record the current X for next frame erase.
+    ld a, (SAUCER_X)
+    ld (SAUCER_PREV_X), a
 
     ret
 
@@ -423,8 +454,13 @@ Saucer_Erase:
     ld c, a                         ; C = Y coordinate
     ld a, b
     call Video_CalcAddress          ; Returns HL = screen address
-    
-    ; Clear sprite area (8 rows, 2 bytes wide)
+
+    ; Horizontal bit offset determines whether a fourth spill byte is used.
+    ld a, b
+    and 0x07
+    ld c, a
+
+    ; Clear sprite area (8 rows, 3 bytes wide, 4 when shifted)
     ld b, SAUCER_HEIGHT
 Saucer_Erase_Loop:
     ld a, h
@@ -434,7 +470,26 @@ Saucer_Erase_Loop:
     ld (hl), a                      ; Clear first byte
     inc hl
     ld (hl), a                      ; Clear second byte
+    inc hl
+    ld (hl), a                      ; Clear third byte
+
+    ld a, c
+    or a
+    jr z, Saucer_Erase_AlignedRow
+
+    inc hl
+    xor a
+    ld (hl), a                      ; Clear spill byte for shifted rows
     dec hl
+    dec hl
+    dec hl
+    jr Saucer_Erase_NextRow
+
+Saucer_Erase_AlignedRow:
+    dec hl
+    dec hl
+
+Saucer_Erase_NextRow:
     
     ; Move to next row in ZX bitmap layout
     call Saucer_NextScanline
@@ -459,11 +514,18 @@ Saucer_DrawExplosion:
     ld c, a                         ; C = Y coordinate
     ld a, b
     call Video_CalcAddress          ; Returns HL = screen address
-    
+
+    ld a, b
+    and 0x07
+    ld c, a
+
     ; Draw explosion sprite
-    ld de, SaucerExplosionSprite
+    ld ix, SaucerExplosionSprite
     ld b, SAUCER_HEIGHT
-    call DrawSimpleSprite
+    call Saucer_DrawShifted24Sprite
+
+    ld a, (SAUCER_X)
+    ld (SAUCER_PREV_X), a
     
     ret
 
@@ -475,21 +537,169 @@ Saucer_DrawExplosion:
 ; Outputs: None
 ; Destroys: AF, BC, DE, HL
 Saucer_DrawScore:
-    ; TODO: Implement score text rendering
-    ; For now, just keep area clear or redraw explosion
-    ; This would use a font rendering system to draw "50", "100", etc.
+    ; Draw the awarded score at the saucer position using the HUD digit font.
+    ld a, (SAUCER_X)
+    and 0xF8                        ; Byte-align for HUD digit renderer
+    ld b, a
+    ld a, (SAUCER_Y)
+    ld c, a
+
+    ; Convert 05/10/15/30 into hundreds+tens+0 ones.
+    ld a, (SAUCER_SCORE_VALUE)
+    ld d, 0                         ; hundreds digit
+.hundreds_loop:
+    cp 10
+    jr c, .hundreds_done
+    sub 10
+    inc d
+    jr .hundreds_loop
+.hundreds_done:
+    ld e, a                         ; tens digit
+
+    ; Only draw hundreds when non-zero (blank for 50).
+    ld a, d
+    or a
+    jr z, .draw_tens
+    push bc
+    ld a, d
+    call HUD_DrawDigit
+    pop bc
+
+.draw_tens:
+    push bc
+    ld a, b
+    add a, 8
+    ld b, a
+    ld a, e
+    call HUD_DrawDigit
+    pop bc
+
+    ld a, b
+    add a, 16
+    ld b, a
+    xor a
+    call HUD_DrawDigit
+
+    ld a, (SAUCER_X)
+    ld (SAUCER_PREV_X), a
     ret
 
 ; ===================================================================
-; DrawSimpleSprite
+; Saucer_DrawShifted24Sprite
 ; ===================================================================
-; Draw a simple 16-pixel wide sprite (2 bytes per row)
+; Draw a 24-pixel wide sprite with 1-pixel horizontal precision.
 ; Inputs:
 ;   HL = screen address
-;   DE = sprite data pointer
+;   IX = sprite data pointer (3 bytes per row)
+;   C = bit offset within target byte (0..7)
 ;   B = number of rows
 ; Outputs: None
-; Destroys: AF, BC, DE, HL
+; Destroys: AF, BC, DE, HL, IX
+Saucer_DrawShifted24Sprite:
+    push bc
+    ld a, h
+    cp 0x58
+    jr nc, Saucer_DrawShifted24Done
+    ld d, (ix+0)
+    ld e, (ix+1)
+    ld a, (ix+2)
+    push af
+    inc ix
+    inc ix
+    inc ix
+
+    ld a, c
+    or a
+    jr z, Saucer_DrawAligned24
+
+    ; Byte 0: src0 >> shift
+    ld a, d
+    ld b, c
+.shift_right_0:
+    srl a
+    djnz .shift_right_0
+    ld (hl), a
+
+    ; Byte 1: (src0 << (8-shift)) | (src1 >> shift)
+    ld a, 8
+    sub c
+    ld b, a
+    ld a, d
+.shift_left_0:
+    sla a
+    djnz .shift_left_0
+    ld d, a
+
+    ld a, e
+    ld b, c
+.shift_right_1:
+    srl a
+    djnz .shift_right_1
+    or d
+    inc l
+    ld (hl), a
+
+    ; Byte 2: (src1 << (8-shift)) | (src2 >> shift)
+    pop af
+    ld d, a                         ; Preserve src2 in D
+    ld a, 8
+    sub c
+    ld b, a
+    ld a, e
+.shift_left_1:
+    sla a
+    djnz .shift_left_1
+    ld e, a
+
+    ld a, d
+    ld b, c
+.shift_right_2:
+    srl a
+    djnz .shift_right_2
+    or e
+    inc l
+    ld (hl), a
+
+    ; Byte 3: src2 << (8-shift)
+    ld a, 8
+    sub d
+    ld b, a
+    ld a, c
+.shift_left_2:
+    sla a
+    djnz .shift_left_2
+    inc l
+    ld (hl), a
+    dec l
+    dec l
+    dec l
+    jr Saucer_DrawShifted24Next
+
+Saucer_DrawAligned24:
+    ld a, d
+    ld (hl), a
+    inc l
+    ld a, e
+    ld (hl), a
+    inc l
+    pop af
+    ld (hl), a
+    dec l
+    dec l
+
+Saucer_DrawShifted24Next:
+    pop bc
+    call Saucer_NextScanline
+    djnz Saucer_DrawShifted24Sprite
+    ret
+
+Saucer_DrawShifted24Done:
+    pop bc
+    ret
+
+; ===================================================================
+; Legacy byte-aligned sprite helper retained only for older references.
+; ===================================================================
 DrawSimpleSprite:
     ld a, h
     cp 0x58
@@ -531,29 +741,27 @@ Saucer_NextScanline:
 ; Sprite Data
 ; ===================================================================
 
-; Saucer sprite (16x8 pixels, rotated for ZX Spectrum)
-; Converted from 8080 data at 1D64
+; Saucer sprite (24x8 pixels) derived from 8080 source at 1D64 using rot90cw.
 SaucerSprite:
-    defb 0x00, 0x00     ; Row 0: ................
-    defb 0x3C, 0x00     ; Row 1: ..****..........
-    defb 0x7E, 0x00     ; Row 2: .*******.........
-    defb 0xFF, 0x00     ; Row 3: ********........
-    defb 0xFF, 0x00     ; Row 4: ********........
-    defb 0x7E, 0x00     ; Row 5: .******.........
-    defb 0x3C, 0x00     ; Row 6: ..****..........
-    defb 0x00, 0x00     ; Row 7: ................
+    defb 0x00, 0x00, 0x00
+    defb 0x00, 0x7E, 0x00
+    defb 0x01, 0xFF, 0x80
+    defb 0x03, 0xFF, 0xC0
+    defb 0x06, 0xDB, 0x60
+    defb 0x0F, 0xFF, 0xF0
+    defb 0x03, 0x99, 0xC0
+    defb 0x01, 0x00, 0x80
 
-; Saucer explosion sprite (16x8 pixels)
-; Converted from 8080 data at 1D7C
+; Saucer explosion sprite (24x8 pixels) derived from 8080 source at 1D7C using rot90cw.
 SaucerExplosionSprite:
-    defb 0x00, 0x00     ; Row 0: ................
-    defb 0x22, 0x00     ; Row 1: ..*...*.........
-    defb 0xA5, 0x00     ; Row 2: *.*..*.*.......
-    defb 0x40, 0x08     ; Row 3: .*........*....
-    defb 0x98, 0x3D     ; Row 4: *..**....****.*..
-    defb 0xB6, 0x3C     ; Row 5: *.**.**..****.....
-    defb 0x36, 0x1D     ; Row 6: ..**.**..***.*.....
-    defb 0x10, 0x48     ; Row 7: ...*......*..*.....
+    defb 0x12, 0x81, 0x48
+    defb 0x08, 0x60, 0x10
+    defb 0x00, 0xC7, 0x8A
+    defb 0x13, 0x9F, 0xC0
+    defb 0x27, 0x2A, 0xE0
+    defb 0x01, 0x8F, 0x88
+    defb 0x08, 0xC5, 0x02
+    defb 0x01, 0x08, 0x88
 
 ; Saucer score table (16 entries)
 ; Values: 05=50pts, 10=100pts, 15=150pts, 30=300pts

@@ -171,6 +171,7 @@ SAUCER_SCORE_PTR_LSB: equ GAME_RAM_BASE + 182  ; Pointer into score table
 SAUCER_SCORE_PTR_MSB: equ GAME_RAM_BASE + 183  ; MSB of score table pointer
 SAUCER_PREV_X: equ GAME_RAM_BASE + 184         ; Previous X for sprite erase
 SAUCER_SCORE_VALUE: equ GAME_RAM_BASE + 185    ; Score awarded (50/100/150/300)
+SAUCER_DEV_HIT_LATCH: equ GAME_RAM_BASE + 199  ; Dev-only H-key edge latch
 
 ; Saucer timing constants
 SAUCER_INIT_DELAY: equ 256                     ; Tuned for quicker, reliable appearance
@@ -178,12 +179,12 @@ SAUCER_MIN_ALIENS: equ 8                       ; Minimum aliens before saucer ap
 SAUCER_HIT_DURATION: equ 32                    ; Frames to show explosion/score
 SAUCER_SCORE_DISPLAY_FRAME: equ 24             ; Frame to display score (32-8)
 
-; Saucer sprite dimensions  
-SAUCER_WIDTH: equ 16                           ; 16 pixels wide
-SAUCER_HEIGHT: equ 8                           ; 8 pixels tall (simplified from 24)
+; Saucer sprite dimensions
+SAUCER_WIDTH: equ 24                           ; 24 pixels wide (ROM-derived)
+SAUCER_HEIGHT: equ 8                           ; 8 pixels tall after ZX adaptation
 SAUCER_Y_POS: equ 16                           ; Fixed Y position at top
 
 ; Saucer movement
 SAUCER_SPEED: equ 1                            ; Pixels per frame
 SAUCER_MIN_X: equ 0                            ; Left boundary
-SAUCER_MAX_X: equ 240                          ; Right boundary (256 - 16)
+SAUCER_MAX_X: equ 231                          ; Right boundary for 24px shifted draw
