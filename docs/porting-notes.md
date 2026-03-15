@@ -18,6 +18,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Task 3 (enemy-shot families, Slices 1–7) is functionally complete**: enemy fire now runs as three dedicated families (rolling/plunger/squiggly) with round-robin scheduling, score-based reload gating, plunger one-alien-left suppression, rolling player-column targeting, squiggly independent table wrap, and family-specific 4-frame row-mask animation in the current renderer. Alien scoring updates the full 16-bit score total. Two implementation regressions (TryFire stack corruption and Update loop stack leak) were fixed; gameplay is stable.
 - **Gameplay pacing has been tuned up slightly** for iteration: shorter main-loop wait (`Timing_WaitShort`) and faster player shot speed (`SHOT_SPEED=5`).
 - **Gameplay pacing has been tuned up again** for broader responsiveness: `Timing_WaitShort` loop reduced to 2800, alien march delay reduced to 7, player shot speed increased to 6, enemy shot speed increased to 3, and enemy family fire delay reduced to 18.
+- **Player sprite parity isolation toggle added**: `PLAYER_DEBUG_BYTE_ALIGN` can force player X to 8-pixel alignment (`src/constants.z80`) so the no-shift draw path can be validated against shifted rendering.
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 - **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
 - **Alien sprite parity is complete** (ROM-derived A/B/C row families, 2-frame animation, deterministic transform pipeline).
@@ -148,6 +149,7 @@ Target documents to produce/extend next:
 3. Revisit/complete shields parity details (damage/collision behavior remains simplified).
 4. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.
 5. Resolve player sprite parity by isolating shifted-draw interpretation (byte-aligned A/B candidate tables), then lock final player table.
+   - Progress (2026-03-15): compile-time isolation toggle implemented (`PLAYER_DEBUG_BYTE_ALIGN`) and wired into player init/movement path to force byte-aligned drawing when enabled.
 6. Replace placeholder saucer/shield/shot graphics with source-derived monochrome sprite tables.
 7. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
 8. End-phase optimization: ISR-synchronized rendering to reduce flicker.

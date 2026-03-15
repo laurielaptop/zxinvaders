@@ -7,7 +7,9 @@ Player_Init:
     ld hl, GAME_RAM_BASE + PLAYER_OBJ_OFFSET
     
     ; X position (center of screen)
-    ld (hl), 128
+    ld a, 128
+    call Player_ApplyDebugByteAlign
+    ld (hl), a
     inc hl
     
     ; Y position (near bottom)
@@ -65,6 +67,7 @@ Player_CheckRight:
     ld a, PLAYER_MAX_X
     
 Player_StoreX:
+    call Player_ApplyDebugByteAlign
     ld (hl), a
     
 Player_CheckFire:
@@ -87,6 +90,16 @@ Player_ClearFire:
     ld (hl), 0
     
 Player_UpdateDone:
+    ret
+
+Player_ApplyDebugByteAlign:
+    ; Temporary player-parity debug mode: force byte alignment to bypass shifted draw path.
+    ld d, a
+    ld a, PLAYER_DEBUG_BYTE_ALIGN
+    or a
+    ld a, d
+    ret z
+    and 0xF8
     ret
 
 Player_Erase:
