@@ -14,9 +14,9 @@ This note captures missing gameplay elements that must be documented from `resou
 
 - Shields: COMPLETE (4 shields with erase/draw cycle, proper 48-pixel spacing)
 - Saucer/UFO: COMPLETE (tuned 256-loop countdown for current busy-wait pacing, horizontal movement with direction logic, score table 50/100/150/300, hit detection, explosion sequence)
-- Alien shot families: partial (single simplified system exists)
+- Alien shot families: FUNCTIONALLY COMPLETE (rolling/plunger/squiggly scheduling, reload gating, targeting rules, and interleaved motion are implemented; sprite art parity still remains)
 - Alien row graphics/animation: COMPLETE (row type A/B/C mapping and 2-frame animation from ROM-derived tables)
-- Player sprite parity: BLOCKED (source data integrated but renderer/table interpretation still mismatched)
+- Player sprite parity: COMPLETE (ROM-derived player sprite locked; renderer pointer-corruption bug fixed)
 - Graphics/source analysis: complete for sprite assets and animation/render pipeline (`docs/graphics-animation-parity.md`)
 - Explosions: partial
   - Player explosion: implemented and arcade-style timed.
@@ -74,8 +74,8 @@ Note: original logic initializes **4 shields** (`LD C,$04` at `resources/source.
 - Source bitmap tables for player, aliens, saucer, shields, and all shot families are now cataloged.
 - Original render path semantics (`DrawSprite`, `DrawShiftedSprite`, `EraseShifted`, collision draw) are documented.
 - Alien tables are now migrated from source ROM blocks using deterministic transform tooling.
-- Player sprite parity remains open and should be solved by renderer-isolation (byte-aligned A/B tables) before resuming wider sprite migration.
-- Next implementation can proceed module-by-module for saucer/shields/shots after player table lock.
+- Player sprite parity is now complete using ROM-derived source bytes with a locked `rot90cw` transform for the current ZX renderer.
+- Next implementation can proceed module-by-module for saucer/shields/shots, with attribute-memory corruption still the main cross-cutting stability issue.
 
 ## Open Decision
 

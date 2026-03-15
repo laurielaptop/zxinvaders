@@ -15,7 +15,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Player and alien explosion systems are implemented** (timed animation, hit-triggered state machines, and cleanup).
 - **Task 1 (lives + game-over/restart) is complete**: HUD lives digit renders correctly, lives decrement on hit, game-over mode triggers at zero lives, screen clears and "GAME OVER" banner is shown, and restart is available via fire key or auto-timeout (180 frames).
 - **Task 2 (wave-clear detection) is complete**: when all 55 aliens are killed, the screen clears and a full new wave spawns with shields regenerated and the formation starting 8 pixels lower each wave (cycling over 8 waves). Lives and score carry over. See `docs/wave-clear-logic.md`.
-- **Task 3 (enemy-shot families, Slices 1–7) is functionally complete**: enemy fire now runs as three dedicated families (rolling/plunger/squiggly) with round-robin scheduling, score-based reload gating, plunger one-alien-left suppression, rolling player-column targeting, squiggly independent table wrap, and family-specific 4-frame row-mask animation in the current renderer. Alien scoring updates the full 16-bit score total. Two implementation regressions (TryFire stack corruption and Update loop stack leak) were fixed; gameplay is stable.
+- **Task 3 (enemy-shot families, Slices 1–8) is functionally complete**: enemy fire now runs as three dedicated families (rolling/plunger/squiggly) with round-robin scheduling, score-based reload gating, plunger one-alien-left suppression, rolling player-column targeting, squiggly independent table wrap, family-specific 4-frame row-mask animation, and interleaved family motion in the current renderer. Alien scoring updates the full 16-bit score total. Two implementation regressions (TryFire stack corruption and Update loop stack leak) were fixed; gameplay is stable.
 - **Gameplay pacing has been tuned up slightly** for iteration: shorter main-loop wait (`Timing_WaitShort`) and faster player shot speed (`SHOT_SPEED=5`).
 - **Gameplay pacing has been tuned up again** for broader responsiveness: `Timing_WaitShort` loop reduced to 2800, alien march delay reduced to 7, player shot speed increased to 6, enemy shot speed increased to 3, and enemy family fire delay reduced to 18.
 - **Player sprite corruption root cause identified**: `Player_Draw` was clobbering the sprite-table pointer by reusing `DE` for both pointer state and row bytes, producing random dot/line output regardless of table choice. The draw path now keeps the pointer separate.
@@ -89,7 +89,6 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - Lives/game-over flow could benefit from a polish pass (arcade-authentic respawn delay suppressing enemy fire, improved messaging/UI).
 - Wave progression is implemented, but still needs parity tuning against original pacing and transition timing.
 - Saucer bring-up diagnostics have been removed from the main loop after render/timing validation.
-- Player sprite path still needs final table/byte-order lock to match arcade silhouette.
 
 ### Known Issues
 - **Intermittent random colored attribute squares still appear on screen in gameplay.**
@@ -102,14 +101,14 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 ### Immediate Stabilization Plan (Short)
 1. Remove all remaining unsafe bitmap scanline stepping (`inc h`-only loops) from active gameplay render paths.
 2. Add temporary write guards/instrumentation to flag any attempted bitmap write where `HL >= 0x5800`.
-3. Re-verify wave transitions and player/enemy shot lifecycles under accelerated pacing (`Timing_WaitShort`, `SHOT_SPEED=5`).
-4. Once stable, continue with Task 3 (arcade-style enemy shot families).
+3. Re-verify wave transitions and player/enemy shot lifecycles under accelerated pacing (`Timing_WaitShort`, `SHOT_SPEED=6`).
+4. Once stable, continue with remaining graphics parity targets (shots, shields, saucer).
 
 ### Gameplay Parity Gaps (Confirmed)
 - Saucer/UFO bonus target is now implemented (timed top-row flyby + score award based on arcade behavior, with timing currently calibrated for busy-wait frame pacing).
-- Alien shot system is currently simplified and does not yet implement three arcade shot families.
+- Alien shot system now implements three-family scheduling and gameplay behavior, but still uses simplified pixel art rather than fully source-matched shot sprites.
 - Alien rendering now uses row-specific arcade-derived sprite families and frame toggling.
-- Player sprite currently does not match the original silhouette in-game; further renderer-isolation is required.
+- Player sprite now matches the original silhouette in-game using ROM-derived data with the locked `rot90cw` transform.
 - Sprite source mapping and render/animation behavior are now documented in `docs/graphics-animation-parity.md`.
 - Explosion animation parity is partial: player and alien explosions are in place; remaining parity gaps are secondary shot/saucer side-effect details.
 
@@ -132,7 +131,7 @@ Target documents to produce/extend next:
 - `docs/explosions-logic.md`
 
 ### Remaining Steps
-1. **Task 3**: Expand enemy fire to arcade-like shot families (plunger, squiggly, rolling) and reload/timing parity (see `docs/enemy-fire-logic.md`).
+1. **Enemy-shot parity polish**: keep the current family scheduler, but replace simplified projectile graphics with source-matched shot pixel art and tighten ISR-timed scheduling precision (see `docs/enemy-fire-logic.md`).
    - Source analysis refresh completed (2026-03-15): scheduler gating (`shotSync`), reload-rate lookup tables (`1CB8`/`1AA1`/`1AA5`), and plunger/squiggly table wrap points are now documented for implementation.
    - Implementation slice 1 completed: scheduler/reload parity state scaffolding (`ENEMY_SHOT_SYNC_PHASE`, `ENEMY_SHOT_RELOAD_RATE`) added without changing current firing behavior.
    - Implementation slice 2 completed: enemy-shot runtime is now split into three dedicated family slots with round-robin family selection, while projectile visuals and firing-source logic remain intentionally simplified.
@@ -149,9 +148,9 @@ Target documents to produce/extend next:
 3. Revisit/complete shields parity details (damage/collision behavior remains simplified).
 4. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.
 5. Replace placeholder saucer/shield/shot graphics with source-derived monochrome sprite tables.
-7. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
-8. End-phase optimization: ISR-synchronized rendering to reduce flicker.
-9. Audio pass: fire, hit, and alien movement sound effects.
+6. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
+7. End-phase optimization: ISR-synchronized rendering to reduce flicker.
+8. Audio pass: fire, hit, and alien movement sound effects.
 
 ## Build/Run Verification Note
 - `make run-zesarux` is the correct command and does rebuild/package before launch.
