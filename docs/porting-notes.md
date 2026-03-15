@@ -15,7 +15,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Player and alien explosion systems are implemented** (timed animation, hit-triggered state machines, and cleanup).
 - **Task 1 (lives + game-over/restart) is complete**: HUD lives digit renders correctly, lives decrement on hit, game-over mode triggers at zero lives, screen clears and "GAME OVER" banner is shown, and restart is available via fire key or auto-timeout (180 frames).
 - **Task 2 (wave-clear detection) is complete**: when all 55 aliens are killed, the screen clears and a full new wave spawns with shields regenerated and the formation starting 8 pixels lower each wave (cycling over 8 waves). Lives and score carry over. See `docs/wave-clear-logic.md`.
-- **Task 3 (enemy-shot families, Slices 1–3) is complete and gameplay-verified**: enemy fire is now split into three dedicated family slots (rolling/plunger/squiggly). Fire attempts are staggered round-robin by family, per-family step counters enforce spacing between shots, and score-based reload-rate gating is active using arcade-equivalent thresholds. Alien scoring now correctly updates the full 16-bit score total. Two regressions introduced during implementation were resolved: a stack-corruption blackout in `EnemyShot_TryFire` and a stack-leak rack-reset in `EnemyShot_Update`. Both are fixed and the game is stable. Remaining slices (plunger suppress, rolling targeting, squiggly table, sprites) are queued.
+- **Task 3 (enemy-shot families, Slices 1–7) is functionally complete**: enemy fire now runs as three dedicated families (rolling/plunger/squiggly) with round-robin scheduling, score-based reload gating, plunger one-alien-left suppression, rolling player-column targeting, squiggly independent table wrap, and family-specific 4-frame row-mask animation in the current renderer. Alien scoring updates the full 16-bit score total. Two implementation regressions (TryFire stack corruption and Update loop stack leak) were fixed; gameplay is stable.
 - **Gameplay pacing has been tuned up slightly** for iteration: shorter main-loop wait (`Timing_WaitShort`) and faster player shot speed (`SHOT_SPEED=5`).
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 - **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
@@ -137,8 +137,10 @@ Target documents to produce/extend next:
    - Implementation slice 3 completed: score-based reload-rate gating is now active using arcade-equivalent score thresholds, backed by per-family shot step counters and 16-bit alien score updates.
    - Bug fix (2026-03-15): stack corruption in `EnemyShot_TryFire` — missing `push hl` before `call EnemyShot_PickAlienForFamily` caused a blackout/lockup ~6s into each game. Fixed.
    - Bug fix (2026-03-15): stack leak in `EnemyShot_Update` — per-frame unbalanced push/pop for step-counter wiring caused all aliens to reset when any alien was hit. Rewrote update loop with clean balanced push/pop. Fixed.
-   - Slices 1–3 are now stable and gameplay-verified.
-   - Remaining: Slice 4 (plunger one-alien-left suppress), Slice 5 (rolling player-column targeting), Slice 6 (squiggly independent table), Slice 7 (sprite families).
+   - Slices 1–3 are stable and gameplay-verified.
+   - Slices 4–7 implemented: plunger suppression, rolling targeting, squiggly independent table, family-specific 4-frame row-mask animation.
+   - Cadence tune (2026-03-15): global family fire-attempt gate reduced from 60 to 20 frames to better match three-family scheduling density while retaining stable guard logic.
+   - Follow-up parity polish remains: ISR-timed scheduling precision and fully source-matched shot pixel art in a wider shifted-sprite renderer path.
 2. Resolve the **attribute-square known issue** (unexpected writes into attribute RAM during gameplay).
 3. Revisit/complete shields parity details (damage/collision behavior remains simplified).
 4. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.

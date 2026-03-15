@@ -271,22 +271,27 @@ Our Spectrum port uses a **simplified single-shot-type system** with the core co
    - Skip if no alien alive in that column
 
 3. **Fixed firing delay**
-   - Fire attempt every 60 frames
-   - 2 concurrent shots maximum (MAX_ENEMY_SHOTS)
-   - Simpler than three-shot synchronization system
+   - Fire attempt every 20 frames (global gate; families still stagger by sync phase)
+   - 3 concurrent family slots maximum (one per family)
+   - Simpler than full ISR-driven synchronization timing
 
-4. **Single shot type**
-   - Straight vertical drop (no animation patterns)
-   - Can add multiple types later for variety
+4. **Family-specific visuals**
+   - Distinct 4-frame row-mask animation per family (rolling/plunger/squiggly)
+   - Drawn through the stable 1-bit-per-row renderer path
 
 ### Current Implementation
 ```z80
 EnemyShot_TryFire:
-    ; Check counter (every 60 frames)
-    ld hl, ENEMY_SHOT_COUNTER
-    inc (hl)
-    cp ENEMY_SHOT_FIRE_DELAY (60)
-    ret c
+   ; Check counter (every 20 frames)
+   ld hl, ENEMY_SHOT_COUNTER
+   inc (hl)
+   cp ENEMY_SHOT_FIRE_DELAY (20)
+   ret c
+
+   ; Family select after gate
+   ld a, (ENEMY_SHOT_SYNC_PHASE)
+   call EnemyShot_SelectFamilySlot
+   call EnemyShot_AdvanceSyncPhase
     
     ; Find available shot slot (2 slots max)
     ; Get next column from firing table
@@ -294,10 +299,11 @@ EnemyShot_TryFire:
     ; Calculate position below alien
     ; Activate shot
     
-EnemyShot_PickAlien:
-    ; Use column-firing table
-    ; Search specific column from bottom to top
-    ; Return first alive alien found
+EnemyShot_PickAlienForFamily:
+   ; Rolling: player-column targeting
+   ; Plunger: 16-entry table + one-alien-left suppression
+   ; Squiggly: independent 15-entry table + independent wrap
+   ; All use shared bottom-up FindInColumn search
 ```
 
 ### Differences from Original
@@ -344,11 +350,109 @@ Important implementation note:
   `Debug_ShowFireCounter` must preserve `A`, because `EnemyShot_TryFire` compares
   `A` against `ENEMY_SHOT_FIRE_DELAY` immediately after the debug call.
 
-### Remaining Enhancements (Slices 4–7)
-1. **Slice 4**: Plunger one-alien-left suppression (when `ALIEN_COUNT_REMAINING <= 1`, plunger family does not fire)
-2. **Slice 5**: Rolling shot player-column targeting (`FindColumn` equivalent using `PLAYER_X`)
-3. **Slice 6**: Squiggly independent 21-entry column table with its own pointer/wrap
-4. **Slice 7**: Four-frame sprite animation per family to match arcade visual style
+### Task 3 Status (Slices 4–7)
+1. **Slice 4**: Plunger one-alien-left suppression is implemented (`ALIEN_COUNT_REMAINING <= 1` blocks plunger spawn).
+2. **Slice 5**: Rolling shot player-column targeting is implemented (player-center-to-rack-column mapping, clamped 0..10).
+3. **Slice 6**: Squiggly independent 15-entry column table is implemented with its own pointer/wrap.
+4. **Slice 7**: Family-specific four-frame animation is implemented in the current 1-bit-per-row renderer.
+
+## Verified Behavior for Slices 4-6 (Source Analysis, 2026-03-15)
+
+### Slice 4: Plunger One-Alien-Left Suppression
+
+Source references: `04B7-04BB` (skip check), `04FC-0505` (flag set after shot completes).
+
+**Original logic:**
+```asm
+04B7: LD  A,(skipPlunger)   ; bit flag at 0x206E
+04BA: AND A
+04BB: RET NZ                 ; Non-zero: skip entire plunger shot object
+; ... after shot blows up and data reset:
+04FC: LD  A,(numAliens)      ; numAliens at 0x2082
+04FF: DEC A                  ; Is there only one left?
+0500: JP  NZ,$0508           ; No: move on
+0503: LD  A,$01              ; Yes: set skipPlunger flag
+0505: LD  (skipPlunger),A    ; ... to suppress future plunger shots
+```
+
+**ZX adaptation:** Rather than maintaining a separate `skipPlunger` flag, check
+`ALIEN_COUNT_REMAINING <= 1` directly in `EnemyShot_PickAlienPlunger`. This is
+behaviorally identical since the arcade flag is only set when `numAliens == 1`
+and stays set until wave reset. Direct check is simpler and eliminates a RAM byte.
+
+**Implementation rule:** `cp 2 / jr c, fail` at the start of `EnemyShot_PickAlienPlunger`
+returns A=0 (no shot spawned) when ALIEN_COUNT_REMAINING is 0 or 1.
+
+---
+
+### Slice 5: Rolling Shot Player-Column Targeting
+
+Source references: `061B-062C` (tracking shot via FindColumn), `156F-1578` (FindColumn).
+
+**Original logic:**
+```asm
+061B: LD  A,(playerXr)       ; Player X coordinate
+061E: ADD A,$08              ; Center of player (+8)
+0620: LD  H,A               ; H = player center X
+0621: CALL FindColumn        ; Returns column (0-based) in C
+0624: LD  A,C
+0625: CP  $0C               ; Valid column (< 12)?
+0627: JP  C,$05A5           ; Yes: fire from that column
+062A: LD  C,$0B             ; No: clamp to column 11
+062C: JP  $05A5             ; Fire
+```
+
+`FindColumn` computes column from rack reference X and player center X by counting
+16-pixel steps. ZX equivalent: `column = (playerCenter - ALIEN_REF_X) / 16`.
+
+**ZX adaptation:**
+- Read `GAME_RAM_BASE + PLAYER_X` (player X at offset 0), add 8 for center, subtract `ALIEN_REF_X`
+- If player is left of rack reference: use column 0
+- Shift right 4 to divide by 16
+- Clamp to 0..ALIEN_COLS-1 (0..10)
+- Rolling **no longer uses a column table**. `ENEMY_SHOT_ROLLING_TABLE_PTR` constant and its init are removed.
+
+---
+
+### Slice 6: Squiggly Independent Column Table
+
+Source references: `0526-0531` (squiggly wrap check), `1D00-1D14` (ColFireTable).
+
+**Original column table at `$1D00` (21 entries total):**
+```
+Index:  00 01 02 03 04 05 | 06 07 08 09 0A 0B 0C 0D 0E 0F | 10 11 12 13 14
+Entry:  01 07 01 01 01 04 | 0B 01 06 03 01 01 0B 09 02 08 | 02 0B 04 07 0A
+```
+- **Plunger** uses indices 00-0F (16 entries): `01 07 01 01 01 04 0B 01 06 03 01 01 0B 09 02 08`
+- **Squiggly** uses indices 06-14 (15 entries): `0B 01 06 03 01 01 0B 09 02 08 02 0B 04 07 0A`
+
+**Original wrap checks:**
+- Plunger (`04DC`): `CP $10` (16) — resets to index 0 of table
+- Squiggly (`0529`): `CP $15` (21) — resets to index 6 of table (i.e., `$1B58` = 0x06)
+
+**ZX adaptation:** The existing 16-entry `EnemyShot_ColumnTable` serves as the plunger table.
+A new `EnemyShot_SquigglyTable` (15 entries) holds squiggly's sequence. Each family wraps
+independently at its own table end. `ENEMY_SHOT_SQUIGGLY_TABLE_PTR` initialized to
+`EnemyShot_SquigglyTable` in `EnemyShot_Init`.
+
+---
+
+### Slice 7: Family Sprite Visual/Animation Parity
+
+Source references: `05D4-05E2` (image pointer advances `+3`, wraps after 4 frames),
+`05C8-05D1` (step count and per-frame motion sequencing).
+
+**Original behavior:** each shot family has distinct sprite frames and cycles through 4-frame
+animation while moving.
+
+**ZX adaptation (current renderer-constrained):**
+- Keep existing 1-bit-wide bitmap write path and per-row clipping stability.
+- Add per-family 4-frame row-mask animation tables (`EnemyShot_SpritePatternsRolling`,
+   `EnemyShot_SpritePatternsPlunger`, `EnemyShot_SpritePatternsSquiggly`).
+- Select frame by family step-counter low bits (`stepCounter & 0x03`) so animation advances
+   in lockstep with shot movement.
+- Draw path tests row bits (top..bottom) each frame, giving visible family-distinct patterns
+   without changing collision geometry or introducing multi-byte shifted rendering regressions.
 
 ## Task 3 Source-First Implementation Contract (Do This Order)
 
@@ -396,6 +500,12 @@ Bug fix note (2026-03-15, post-Slice 2):
 Bug fix note (2026-03-15, post-Slice 3):
 - **All aliens resetting on single alien hit**: `EnemyShot_Update` leaked one stack entry per active enemy shot per frame due to an unbalanced push/pop in the step-counter wiring. Over many frames this corrupted SP enough that the return from alien-hit handling landed inside `Aliens_NewWave`, resetting the entire rack. Fixed by rewriting the update loop with strictly balanced push/pop pairs and using `ld c, a` to preserve the updated Y value instead of an extra push.
 - Slices 1–3 are now stable and gameplay-verified (2026-03-15).
+
+Additional progress note (2026-03-15, Slices 4-7):
+- Slice 4 implemented: plunger one-alien-left suppression is active.
+- Slice 5 implemented: rolling now targets the player's column instead of using a column table.
+- Slice 6 implemented: squiggly now uses an independent 15-entry table and independent pointer wrap.
+- Slice 7 implemented: family-specific 4-frame row-mask animation is now wired into `EnemyShot_Draw`.
 
 6. **Sync with ISR** to match arcade timing precision
 

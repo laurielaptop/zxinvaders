@@ -32,16 +32,17 @@ EnemyShot_InitLoop:
     ld (ENEMY_SHOT_SQUIGGLY_STEPS), a
     
     ; Initialize family firing-table pointers.
+    ; Plunger uses the 16-entry column table; squiggly has its own 15-entry table.
     ld hl, EnemyShot_ColumnTable
-    ld (ENEMY_SHOT_ROLLING_TABLE_PTR), hl
     ld (ENEMY_SHOT_PLUNGER_TABLE_PTR), hl
+    ld hl, EnemyShot_SquigglyTable
     ld (ENEMY_SHOT_SQUIGGLY_TABLE_PTR), hl
     ret
 
 EnemyShot_TryFire:
     ; Periodically try to spawn enemy shot from random alien
     call EnemyShot_UpdateParityState
-    
+
     ; Check fire counter
     ld hl, ENEMY_SHOT_COUNTER
     inc (hl)
@@ -49,7 +50,7 @@ EnemyShot_TryFire:
     cp ENEMY_SHOT_FIRE_DELAY
     ret c                        ; Not time yet
     ld (hl), 0                   ; Reset counter
-    
+
     ; Select which family gets the next fire attempt.
     ld a, (ENEMY_SHOT_SYNC_PHASE)
     push af
@@ -180,12 +181,12 @@ EnemyShot_IsScoreBelowDE:
 EnemyShot_IsFireAllowedForFamily:
     ; Input: A = family id
     ; Output: A = 1 if allowed, A = 0 if blocked by reload spacing
-    ld b, a
+    ld c, a
     call EnemyShot_GetReloadGuard1ForFamily
     call EnemyShot_CheckReloadGuardValue
     ret z
 
-    ld a, b
+    ld a, c
     call EnemyShot_GetReloadGuard2ForFamily
     call EnemyShot_CheckReloadGuardValue
     ret z
@@ -308,23 +309,71 @@ EnemyShot_PickAlienForFamily:
     jr EnemyShot_PickAlienRolling
 
 EnemyShot_PickAlienRolling:
-    ; Placeholder for upcoming player-column targeting slice.
-    ld de, ENEMY_SHOT_ROLLING_TABLE_PTR
-    jr EnemyShot_PickAlienFromTablePtr
+    ; Slice 5: Target the alien column directly above the player's center.
+    ; column = clamp((playerCenter - ALIEN_REF_X) >> 4, 0, ALIEN_COLS-1)
+    ld a, (GAME_RAM_BASE)        ; Player X (PLAYER_X offset = 0)
+    add a, 8                     ; Centre: PLAYER_WIDTH/2 = 8
+    ld b, a                      ; B = player centre X
+    ld a, (ALIEN_REF_X)          ; A = rack left-edge X
+    sub b                        ; A = refX - playerCentre
+    jr nc, .rolling_col_zero     ; refX >= playerCentre: column 0
+    neg                          ; A = playerCentre - refX (positive)
+    srl a
+    srl a
+    srl a
+    srl a                        ; A = distance / 16 = column index
+    ld c, a
+    cp ALIEN_COLS                ; >= 11?
+    jr c, EnemyShot_FindInColumnC
+    ld c, ALIEN_COLS - 1         ; Clamp to rightmost column (10)
+    jr EnemyShot_FindInColumnC
+.rolling_col_zero:
+    ld c, 0
+    jr EnemyShot_FindInColumnC
 
 EnemyShot_PickAlienPlunger:
+    ; Slice 4: Source parity — suppress plunger when <= 1 alien remains.
+    ; (Arcade: skipPlunger flag set at 04FC-0505; ZX: direct check is equivalent.)
+    ld a, (ALIEN_COUNT_REMAINING)
+    cp 2                         ; Carry set if A < 2 (i.e. 0 or 1 alien)
+    jr c, EnemyShot_PickAlienFail
     ld de, ENEMY_SHOT_PLUNGER_TABLE_PTR
     jr EnemyShot_PickAlienFromTablePtr
 
 EnemyShot_PickAlienSquiggly:
+    ; Slice 6: Use squiggly-specific 15-entry table with independent pointer/wrap.
     ld de, ENEMY_SHOT_SQUIGGLY_TABLE_PTR
-    jr EnemyShot_PickAlienFromTablePtr
+    ld a, (de)
+    ld l, a
+    inc de
+    ld a, (de)
+    ld h, a                      ; HL = current squiggly table pointer
+    ld a, (hl)                   ; Column entry (1..11)
+    dec a                        ; Convert to 0..10
+    ld c, a
+    ; Advance pointer with squiggly-specific wrap.
+    inc hl
+    ld a, l
+    cp LOW EnemyShot_SquigglyTableEnd
+    jr nz, .sqgl_ptr_ok
+    ld a, h
+    cp HIGH EnemyShot_SquigglyTableEnd
+    jr nz, .sqgl_ptr_ok
+    ld hl, EnemyShot_SquigglyTable
+.sqgl_ptr_ok:
+    dec de                       ; Back to low byte of ptr storage
+    ld a, l
+    ld (de), a
+    inc de
+    ld a, h
+    ld (de), a
+    jr EnemyShot_FindInColumnC
 
 EnemyShot_PickAlienFromTablePtr:
     ; Use column-firing table to pick a column, then find lowest alive alien in that column.
     ; Returns: B = X, D = Y, A = 1 on success. A = 0 if none found.
 
-    ; Get next column from table (stored as 1..11), convert to 0..10 in C.
+    ; Read next column from table pointer stored at DE, advance pointer with plunger table wrap.
     ld a, (de)
     ld l, a
     inc de
@@ -334,16 +383,16 @@ EnemyShot_PickAlienFromTablePtr:
     dec a
     ld c, a
 
-    ; Advance table pointer with wraparound.
+    ; Advance pointer with plunger/column table wrap.
     inc hl
     ld a, l
     cp LOW EnemyShot_ColumnTableEnd
-    jr nz, EnemyShot_TablePtrOK
+    jr nz, .ptr_ok
     ld a, h
     cp HIGH EnemyShot_ColumnTableEnd
-    jr nz, EnemyShot_TablePtrOK
+    jr nz, .ptr_ok
     ld hl, EnemyShot_ColumnTable
-EnemyShot_TablePtrOK:
+.ptr_ok:
     dec de
     ld a, l
     ld (de), a
@@ -351,7 +400,11 @@ EnemyShot_TablePtrOK:
     ld a, h
     ld (de), a
 
-    ; HL = pointer to bottom row, selected column.
+    ; Fall through to shared find-in-column logic.
+EnemyShot_FindInColumnC:
+    ; Input: C = 0-based column index (0..10)
+    ; Searches from bottom row upward for lowest alive alien in that column.
+    ; Returns: B = X, D = Y, A = 1 on success; A = 0 if no alien found.
     ld hl, ALIEN_GRID_BASE + ((ALIEN_ROWS - 1) * ALIEN_COLS)
     ld e, c
     ld d, 0
@@ -377,6 +430,7 @@ EnemyShot_FindInColumnLoop:
     jr nz, EnemyShot_FindInColumnLoop
 
     ; No alive alien in selected column.
+EnemyShot_PickAlienFail:
     xor a
     ret
 
@@ -675,6 +729,13 @@ EnemyShot_DrawLoop:
     inc hl
     ld c, (hl)                   ; C = Y
 
+    ; Pick animated 4-row pattern for this slot's family.
+    ; Bits 3..0 map to rows top..bottom.
+    push ix
+    pop hl                       ; HL = shot structure base
+    call EnemyShot_GetSpritePatternForSlot
+    push af                      ; Save pattern for per-row tests
+
     ; Build draw mask once for this X bit
     ld a, b
     and 0x07
@@ -689,20 +750,50 @@ EnemyShot_DrawShiftLoop:
 EnemyShot_DrawMaskReady:
     ld d, a                      ; D = draw mask
 
-    ; Draw 4-pixel vertical line with per-row clipping
+    ; Draw 4-row family pattern with per-row clipping.
     ld e, ENEMY_SHOT_HEIGHT
 EnemyShot_DrawPixelLoop:
+    ; Recover frame pattern and test current row bit (E: 4,3,2,1 -> bits 3,2,1,0).
+    pop af
+    push af
+    ld h, a
+
+    ld a, e
+    cp 4
+    jr z, EnemyShot_DrawRowBit3
+    cp 3
+    jr z, EnemyShot_DrawRowBit2
+    cp 2
+    jr z, EnemyShot_DrawRowBit1
+    bit 0, h
+    jr z, EnemyShot_DrawSkipPixel
+    jr EnemyShot_DrawDoPixel
+EnemyShot_DrawRowBit1:
+    bit 1, h
+    jr z, EnemyShot_DrawSkipPixel
+    jr EnemyShot_DrawDoPixel
+EnemyShot_DrawRowBit2:
+    bit 2, h
+    jr z, EnemyShot_DrawSkipPixel
+    jr EnemyShot_DrawDoPixel
+EnemyShot_DrawRowBit3:
+    bit 3, h
+    jr z, EnemyShot_DrawSkipPixel
+
+EnemyShot_DrawDoPixel:
     ld a, c
     cp 192
-    jr nc, EnemyShot_DrawDone
+    jr nc, EnemyShot_DrawDoneClip
     ld a, b
     call Video_CalcAddress
     ld a, (hl)
     or d
     ld (hl), a
+EnemyShot_DrawSkipPixel:
     inc c
     dec e
     jr nz, EnemyShot_DrawPixelLoop
+    pop af                       ; Discard saved pattern
 EnemyShot_DrawDone:
     
     ; Update PREV_Y using saved structure pointer
@@ -713,6 +804,11 @@ EnemyShot_DrawDone:
     inc hl                       ; Point to PREV_Y
     ld (hl), a                   ; Store current Y in PREV_Y
     pop ix                       ; Restore IX
+    jr EnemyShot_DrawNext
+
+EnemyShot_DrawDoneClip:
+    pop af                       ; Discard saved pattern
+    jr EnemyShot_DrawDone
     
 EnemyShot_DrawNext:
     pop hl
@@ -722,13 +818,61 @@ EnemyShot_DrawNext:
     djnz EnemyShot_DrawLoop
     ret
 
+EnemyShot_GetSpritePatternForSlot:
+    ; Input: HL = enemy-shot slot base
+    ; Output: A = 4-bit row pattern for current family and animation frame
+    ;         bit3..bit0 map to top..bottom row
+    push hl
+    call EnemyShot_GetStepCounterPtrForSlot
+    ld a, (de)
+    and 0x03                     ; 4-frame cycle
+    ld e, a
+    pop hl
+
+    ; Select family table from slot index.
+    ld a, l
+    cp LOW(ENEMY_SHOT_LIST_BASE + ENEMY_SHOT_OBJ_SIZE)
+    jr c, .rolling
+    cp LOW(ENEMY_SHOT_LIST_BASE + (ENEMY_SHOT_OBJ_SIZE * 2))
+    jr c, .plunger
+    ld hl, EnemyShot_SpritePatternsSquiggly
+    jr .table_ok
+.rolling:
+    ld hl, EnemyShot_SpritePatternsRolling
+    jr .table_ok
+.plunger:
+    ld hl, EnemyShot_SpritePatternsPlunger
+.table_ok:
+    ld d, 0
+    add hl, de
+    ld a, (hl)
+    ret
+
+; ===== Shot Family Sprite Patterns =====
+; 4-frame animated row masks (bit3..bit0 = top..bottom rows).
+EnemyShot_SpritePatternsRolling:
+    defb 0x8, 0x4, 0x2, 0x1
+
+EnemyShot_SpritePatternsPlunger:
+    defb 0xF, 0xE, 0xD, 0xB
+
+EnemyShot_SpritePatternsSquiggly:
+    defb 0xA, 0x5, 0x6, 0x9
+
 ; ===== Column-Firing Table =====
-; Sequence of columns (0-10) to fire from, cycles through different positions.
-; Based on original arcade plunger shot table pattern.
+; Plunger column-firing table — indices 00-0F of original ColFireTable ($1D00).
+; 16 entries, used by plunger shot family. Columns are 1-indexed (1..11).
 EnemyShot_ColumnTable:
     defb 1, 7, 1, 1, 1, 4, 11, 1, 6, 3
     defb 1, 1, 11, 9, 2, 8
 EnemyShot_ColumnTableEnd:
+
+; Squiggly column-firing table — indices 06-14 of original ColFireTable ($1D06-$1D14).
+; 15 entries, used by squiggly shot family. Columns are 1-indexed (1..11).
+EnemyShot_SquigglyTable:
+    defb 11, 1, 6, 3, 1, 1, 11, 9, 2, 8
+    defb 2, 11, 4, 7, 10
+EnemyShot_SquigglyTableEnd:
 
 ; EnemyShot_Reset
 ; Clear all enemy shots (set to inactive)
