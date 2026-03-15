@@ -118,6 +118,9 @@ ENEMY_SHOT_SQUIGGLY_STEPS: equ ENEMY_SHOT_STEP_COUNTER_BASE + 2
 ENEMY_SHOT_PLUNGER_TABLE_PTR:  equ GAME_RAM_BASE + 129  ; 2 bytes: 16-bit ptr into EnemyShot_ColumnTable
 ENEMY_SHOT_SQUIGGLY_TABLE_PTR: equ GAME_RAM_BASE + 131  ; 2 bytes: 16-bit ptr into EnemyShot_SquigglyTable
 
+; Timing scaffold state
+TIMING_FRAME_PHASE: equ GAME_RAM_BASE + 133             ; 0..2 frame phase (ISR-style scheduling scaffold)
+
 ; ===== Shields (Protective Bases) =====
 SHIELD_COUNT: equ 4
 SHIELD_ROWS: equ 22

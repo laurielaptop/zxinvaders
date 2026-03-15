@@ -140,6 +140,7 @@ Target documents to produce/extend next:
    - Slices 1–3 are stable and gameplay-verified.
    - Slices 4–7 implemented: plunger suppression, rolling targeting, squiggly independent table, family-specific 4-frame row-mask animation.
    - Cadence tune (2026-03-15): global family fire-attempt gate reduced from 60 to 20 frames to better match three-family scheduling density while retaining stable guard logic.
+   - ISR timing scaffold (2026-03-15): `TIMING_FRAME_PHASE` now ticks 0->1->2 each frame in `Timing_WaitShort`, and `EnemyShot_TryFire` now samples that phase for family selection while retaining the stable 20-frame global fire gate.
    - Follow-up parity polish remains: ISR-timed scheduling precision and fully source-matched shot pixel art in a wider shifted-sprite renderer path.
 2. Resolve the **attribute-square known issue** (unexpected writes into attribute RAM during gameplay).
 3. Revisit/complete shields parity details (damage/collision behavior remains simplified).

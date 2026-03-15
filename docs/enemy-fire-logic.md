@@ -271,7 +271,7 @@ Our Spectrum port uses a **simplified single-shot-type system** with the core co
    - Skip if no alien alive in that column
 
 3. **Fixed firing delay**
-   - Fire attempt every 20 frames (global gate; families still stagger by sync phase)
+   - Fire attempt every 20 frames (global gate; family choice sampled from frame phase)
    - 3 concurrent family slots maximum (one per family)
    - Simpler than full ISR-driven synchronization timing
 
@@ -289,9 +289,9 @@ EnemyShot_TryFire:
    ret c
 
    ; Family select after gate
-   ld a, (ENEMY_SHOT_SYNC_PHASE)
+   ld a, (TIMING_FRAME_PHASE)
+   ld (ENEMY_SHOT_SYNC_PHASE), a
    call EnemyShot_SelectFamilySlot
-   call EnemyShot_AdvanceSyncPhase
     
     ; Find available shot slot (2 slots max)
     ; Get next column from firing table

@@ -51,11 +51,12 @@ EnemyShot_TryFire:
     ret c                        ; Not time yet
     ld (hl), 0                   ; Reset counter
 
-    ; Select which family gets the next fire attempt.
-    ld a, (ENEMY_SHOT_SYNC_PHASE)
+    ; Select family from ISR-style frame phase scaffold.
+    ; Keep ENEMY_SHOT_SYNC_PHASE mirrored for parity/debug visibility.
+    ld a, (TIMING_FRAME_PHASE)
+    ld (ENEMY_SHOT_SYNC_PHASE), a
     push af
     call EnemyShot_SelectFamilySlot
-    call EnemyShot_AdvanceSyncPhase
 
     call Debug_ShowFireAttempt   ; DEBUG: Show we're trying to fire
 

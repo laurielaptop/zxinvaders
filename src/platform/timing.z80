@@ -17,4 +17,13 @@ Timing_WaitShort_Loop:
     ld a, b
     or c
     jr nz, Timing_WaitShort_Loop
+
+    ; ISR-style frame phase scaffold: 0 -> 1 -> 2 -> 0 each frame.
+    ld a, (TIMING_FRAME_PHASE)
+    inc a
+    cp 3
+    jr c, Timing_WaitShort_StorePhase
+    xor a
+Timing_WaitShort_StorePhase:
+    ld (TIMING_FRAME_PHASE), a
     ret
