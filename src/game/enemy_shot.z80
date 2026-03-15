@@ -51,10 +51,9 @@ EnemyShot_TryFire:
     ret c                        ; Not time yet
     ld (hl), 0                   ; Reset counter
 
-    ; Select family from ISR-style frame phase scaffold.
-    ; Keep ENEMY_SHOT_SYNC_PHASE mirrored for parity/debug visibility.
-    ld a, (TIMING_FRAME_PHASE)
-    ld (ENEMY_SHOT_SYNC_PHASE), a
+    ; Select family from rotating attempt phase so all three families
+    ; get turns even when fire delay aligns with frame-phase cadence.
+    ld a, (ENEMY_SHOT_SYNC_PHASE)
     push af
     call EnemyShot_SelectFamilySlot
 
@@ -68,7 +67,7 @@ EnemyShot_TryFire:
     pop hl
     or a
     pop af
-    ret nz                       ; Family slot already active
+    jr nz, EnemyShot_TryFire_AttemptDone
 
     push af
     push hl
@@ -77,7 +76,7 @@ EnemyShot_TryFire:
     or a
     jr nz, .fire_allowed
     pop af
-    ret
+    jr EnemyShot_TryFire_AttemptDone
 .fire_allowed:
     pop af
 
@@ -86,12 +85,12 @@ EnemyShot_TryFire:
     call EnemyShot_PickAlienForFamily
     or a                         ; Check if alien found
     pop hl
-    ret z                        ; No aliens alive
+    jr z, EnemyShot_TryFire_AttemptDone ; No aliens alive
 
     ; If the spawn Y is too low to fit the full sprite, skip this fire attempt.
     ld a, d
     cp 192 - ENEMY_SHOT_HEIGHT + 1
-    ret nc
+    jr nc, EnemyShot_TryFire_AttemptDone
     
     ; BC = alien X, DE = alien Y
     ; Store shot position
@@ -110,6 +109,9 @@ EnemyShot_TryFire:
     pop hl
     
     call Debug_ShowShotCreated   ; DEBUG: Show shot was created
+
+EnemyShot_TryFire_AttemptDone:
+    call EnemyShot_AdvanceSyncPhase
     ret
 
 EnemyShot_UpdateParityState:
@@ -260,10 +262,10 @@ EnemyShot_GetStepCounterPtrForSlot:
     ; Output: DE = step counter byte for that slot's family
     ld de, ENEMY_SHOT_STEP_COUNTER_BASE
     ld a, l
-    cp LOW(ENEMY_SHOT_LIST_BASE + ENEMY_SHOT_OBJ_SIZE)
+    cp (ENEMY_SHOT_LIST_BASE + ENEMY_SHOT_OBJ_SIZE) & 255
     ret c
     inc de
-    cp LOW(ENEMY_SHOT_LIST_BASE + (ENEMY_SHOT_OBJ_SIZE * 2))
+    cp (ENEMY_SHOT_LIST_BASE + (ENEMY_SHOT_OBJ_SIZE * 2)) & 255
     ret c
     inc de
     ret
@@ -384,10 +386,10 @@ EnemyShot_PickAlienSquiggly:
     ; Advance pointer with squiggly-specific wrap.
     inc hl
     ld a, l
-    cp LOW EnemyShot_SquigglyTableEnd
+    cp EnemyShot_SquigglyTableEnd & 255
     jr nz, .sqgl_ptr_ok
     ld a, h
-    cp HIGH EnemyShot_SquigglyTableEnd
+    cp EnemyShot_SquigglyTableEnd >> 8
     jr nz, .sqgl_ptr_ok
     ld hl, EnemyShot_SquigglyTable
 .sqgl_ptr_ok:
@@ -416,10 +418,10 @@ EnemyShot_PickAlienFromTablePtr:
     ; Advance pointer with plunger/column table wrap.
     inc hl
     ld a, l
-    cp LOW EnemyShot_ColumnTableEnd
+    cp EnemyShot_ColumnTableEnd & 255
     jr nz, .ptr_ok
     ld a, h
-    cp HIGH EnemyShot_ColumnTableEnd
+    cp EnemyShot_ColumnTableEnd >> 8
     jr nz, .ptr_ok
     ld hl, EnemyShot_ColumnTable
 .ptr_ok:
@@ -540,10 +542,11 @@ EnemyShot_UpdateLoop:
     ld (de), a
     pop hl
     
-    ; Check if shot top has moved past last safe draw position.
-    ; For 4px tall sprite on 0..191 screen, max safe top Y is 188.
+    ; Keep shot active deep into the lower area so it cannot vanish before
+    ; reaching the player band due to lifetime culling.
+    ; Rendering already clips to the visible bitmap.
     ld a, c
-    cp 192 - ENEMY_SHOT_HEIGHT + 1
+    cp 248
     jr c, EnemyShot_UpdateOK
     
     ; Deactivate and clear PREV_Y marker
@@ -597,28 +600,43 @@ EnemyShot_CheckLoop:
     call Player_GetPosition      ; Returns X in B, Y in C
     pop de
     
-    ; Check if shot overlaps player sprite bounds.
-    ; Shot is at (D, E)
-    ; Player is at (B, C)
-    
-    ; Check X overlap: D >= B and D < B+PLAYER_WIDTH
+    ; Arcade-style player hit check:
+    ; evaluate a fixed strike line slightly below the player sprite rather
+    ; than full sprite-rectangle overlap. This matches the original behavior
+    ; where shots can travel below the visible ship before triggering a hit.
+
+    ; C = strike-line Y.
+    ld a, c
+    add a, PLAYER_HEIGHT + 2
+    ld c, a
+
+    ; Only test X overlap while shot is passing through a narrow band around
+    ; the strike line (prevents repeated hits over many frames).
+    ld a, e                    ; shot Y
+    cp c
+    jr c, EnemyShot_NoHit      ; shot is still above strike line
+
+    ld a, c
+    add a, ENEMY_SHOT_SPEED + 1
+    cp e
+    jr c, EnemyShot_NoHit      ; shot already below strike window
+    jr z, EnemyShot_NoHit
+
+    ; Check horizontal overlap for the 3x8 shot footprint.
+    ; shot_right <= player_left => no hit
     ld a, d
+    add a, ENEMY_SHOT_WIDTH
     cp b
-    jr c, EnemyShot_NoHit        ; Shot X < Player X
+    jr c, EnemyShot_NoHit
+    jr z, EnemyShot_NoHit
+
+    ; player_right <= shot_left => no hit
     ld a, b
     add a, PLAYER_WIDTH
     cp d
-    jr c, EnemyShot_NoHit        ; Shot X >= Player X + PLAYER_WIDTH
-    
-    ; Check Y overlap: E >= C and E < C+PLAYER_HEIGHT
-    ld a, e
-    cp c
-    jr c, EnemyShot_NoHit        ; Shot Y < Player Y
-    ld a, c
-    add a, PLAYER_HEIGHT
-    cp e
-    jr c, EnemyShot_NoHit        ; Shot Y >= Player Y + PLAYER_HEIGHT
-    
+    jr c, EnemyShot_NoHit
+    jr z, EnemyShot_NoHit
+
     ; Hit detected!
     pop bc
     pop hl
@@ -698,36 +716,28 @@ EnemyShot_EraseLoop:
     inc hl
     ld c, (hl)                   ; C = PREV_Y
 
-    ; Build erase mask once for this X bit
+    ; Erase the previous sprite footprint with per-row clipping.
+    push hl
+    call EnemyShot_GetSpriteFramePtrForSlot
+    ld d, ENEMY_SHOT_HEIGHT
+
     ld a, b
     and 0x07
-    ld e, a
-    ld a, 0x80
-    inc e
-EnemyShot_EraseShiftLoop:
-    dec e
-    jr z, EnemyShot_EraseMaskReady
-    srl a
-    jr EnemyShot_EraseShiftLoop
-EnemyShot_EraseMaskReady:
-    cpl
-    ld d, a                      ; D = erase mask
-
-    ; Erase 4-pixel vertical line with per-row clipping
-    ld e, ENEMY_SHOT_HEIGHT
+    ld e, a                      ; E = X sub-byte offset
 EnemyShot_ErasePixelLoop:
     ld a, c
     cp 192
     jr nc, EnemyShot_EraseDone
-    ld a, b
-    call Video_CalcAddress
     ld a, (hl)
-    and d
-    ld (hl), a
+    inc hl
+    push hl
+    call EnemyShot_EraseSpriteRow
+    pop hl
     inc c
-    dec e
+    dec d
     jr nz, EnemyShot_ErasePixelLoop
 EnemyShot_EraseDone:
+    pop hl
     
 EnemyShot_EraseNext:
     pop hl
@@ -764,71 +774,30 @@ EnemyShot_DrawLoop:
     inc hl
     ld c, (hl)                   ; C = Y
 
-    ; Pick animated 4-row pattern for this slot's family.
-    ; Bits 3..0 map to rows top..bottom.
+    ; Pick the current 8-row sprite frame for this slot's family.
     push ix
     pop hl                       ; HL = shot structure base
-    call EnemyShot_GetSpritePatternForSlot
-    push af                      ; Save pattern for per-row tests
+    call EnemyShot_GetSpriteFramePtrForSlot
 
-    ; Build draw mask once for this X bit
+    ; Cache sub-byte X offset for the sprite renderer.
     ld a, b
     and 0x07
-    ld e, a
-    ld a, 0x80
-    inc e
-EnemyShot_DrawShiftLoop:
-    dec e
-    jr z, EnemyShot_DrawMaskReady
-    srl a
-    jr EnemyShot_DrawShiftLoop
-EnemyShot_DrawMaskReady:
-    ld d, a                      ; D = draw mask
+    ld e, a                      ; E = X sub-byte offset
 
-    ; Draw 4-row family pattern with per-row clipping.
-    ld e, ENEMY_SHOT_HEIGHT
+    ; Draw the current family sprite frame with per-row clipping.
+    ld d, ENEMY_SHOT_HEIGHT
 EnemyShot_DrawPixelLoop:
-    ; Recover frame pattern and test current row bit (E: 4,3,2,1 -> bits 3,2,1,0).
-    pop af
-    push af
-    ld h, a
-
-    ld a, e
-    cp 4
-    jr z, EnemyShot_DrawRowBit3
-    cp 3
-    jr z, EnemyShot_DrawRowBit2
-    cp 2
-    jr z, EnemyShot_DrawRowBit1
-    bit 0, h
-    jr z, EnemyShot_DrawSkipPixel
-    jr EnemyShot_DrawDoPixel
-EnemyShot_DrawRowBit1:
-    bit 1, h
-    jr z, EnemyShot_DrawSkipPixel
-    jr EnemyShot_DrawDoPixel
-EnemyShot_DrawRowBit2:
-    bit 2, h
-    jr z, EnemyShot_DrawSkipPixel
-    jr EnemyShot_DrawDoPixel
-EnemyShot_DrawRowBit3:
-    bit 3, h
-    jr z, EnemyShot_DrawSkipPixel
-
-EnemyShot_DrawDoPixel:
     ld a, c
     cp 192
-    jr nc, EnemyShot_DrawDoneClip
-    ld a, b
-    call Video_CalcAddress
+    jr nc, EnemyShot_DrawDone
     ld a, (hl)
-    or d
-    ld (hl), a
-EnemyShot_DrawSkipPixel:
+    inc hl
+    push hl
+    call EnemyShot_DrawSpriteRow
+    pop hl
     inc c
-    dec e
+    dec d
     jr nz, EnemyShot_DrawPixelLoop
-    pop af                       ; Discard saved pattern
 EnemyShot_DrawDone:
     
     ; Update PREV_Y using saved structure pointer
@@ -841,10 +810,6 @@ EnemyShot_DrawDone:
     pop ix                       ; Restore IX
     jr EnemyShot_DrawNext
 
-EnemyShot_DrawDoneClip:
-    pop af                       ; Discard saved pattern
-    jr EnemyShot_DrawDone
-    
 EnemyShot_DrawNext:
     pop hl
     pop bc
@@ -853,46 +818,116 @@ EnemyShot_DrawNext:
     djnz EnemyShot_DrawLoop
     ret
 
-EnemyShot_GetSpritePatternForSlot:
+EnemyShot_DrawSpriteRow:
+    ; Input: A = left-aligned 3-bit row mask, B = X, E = X sub-byte offset
+    or a
+    ret z
+
+    push bc
+    push de
+    ld d, a
+    ld a, b
+    call Video_CalcAddress
+    ld c, e
+    ld a, c
+    or a
+    jr z, EnemyShot_DrawSpriteRowAligned
+
+    ld b, c
+    ld a, d
+.shift_right:
+    srl a
+    djnz .shift_right
+    ld e, a
+
+    ld a, 8
+    sub c
+    ld b, a
+    ld a, d
+.shift_left:
+    sla a
+    djnz .shift_left
+    ld d, a
+
+    ld a, (hl)
+    xor e
+    ld (hl), a
+    ld a, d
+    or a
+    jr z, EnemyShot_DrawSpriteRowDone
+    inc l
+    ld a, (hl)
+    xor d
+    ld (hl), a
+    jr EnemyShot_DrawSpriteRowDone
+
+EnemyShot_DrawSpriteRowAligned:
+    ld a, (hl)
+    xor d
+    ld (hl), a
+
+EnemyShot_DrawSpriteRowDone:
+    pop de
+    pop bc
+    ret
+
+EnemyShot_EraseSpriteRow:
+    ; XOR blit is symmetric: erase uses the same operation as draw.
+    jp EnemyShot_DrawSpriteRow
+
+EnemyShot_GetSpriteFramePtrForSlot:
     ; Input: HL = enemy-shot slot base
-    ; Output: A = 4-bit row pattern for current family and animation frame
-    ;         bit3..bit0 map to top..bottom row
+    ; Output: HL = 8-byte sprite frame for current family/animation step
     push hl
     call EnemyShot_GetStepCounterPtrForSlot
     ld a, (de)
     and 0x03                     ; 4-frame cycle
+    add a, a
+    add a, a
+    add a, a
     ld e, a
     pop hl
 
     ; Select family table from slot index.
     ld a, l
-    cp LOW(ENEMY_SHOT_LIST_BASE + ENEMY_SHOT_OBJ_SIZE)
+    cp (ENEMY_SHOT_LIST_BASE + ENEMY_SHOT_OBJ_SIZE) & 255
     jr c, .rolling
-    cp LOW(ENEMY_SHOT_LIST_BASE + (ENEMY_SHOT_OBJ_SIZE * 2))
+    cp (ENEMY_SHOT_LIST_BASE + (ENEMY_SHOT_OBJ_SIZE * 2)) & 255
     jr c, .plunger
-    ld hl, EnemyShot_SpritePatternsSquiggly
+    ld hl, EnemyShot_SpriteRowsSquiggly
     jr .table_ok
 .rolling:
-    ld hl, EnemyShot_SpritePatternsRolling
+    ld hl, EnemyShot_SpriteRowsRolling
     jr .table_ok
 .plunger:
-    ld hl, EnemyShot_SpritePatternsPlunger
+    ld hl, EnemyShot_SpriteRowsPlunger
 .table_ok:
     ld d, 0
     add hl, de
-    ld a, (hl)
     ret
 
 ; ===== Shot Family Sprite Patterns =====
-; 4-frame animated row masks (bit3..bit0 = top..bottom rows).
-EnemyShot_SpritePatternsRolling:
-    defb 0x8, 0x4, 0x2, 0x1
+; 4-frame animated 3x8 sprites derived from source ROM column data.
+; Each byte is a ZX row mask: bits 7,6,5 = left,mid,right pixel.
+; Derivation: for each row y, col0[y]<<7 | col1[y]<<6 | col2[y]<<5
+; where col0..col2 are the 3 ROM bytes for that frame (LSB = top pixel).
+EnemyShot_SpriteRowsRolling:
+    defb 0x00, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40  ; f0: straight shaft
+    defb 0x00, 0x60, 0xC0, 0x40, 0x60, 0xC0, 0x40, 0x40  ; f1: diagonal bumps
+    defb 0x00, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40  ; f2: straight shaft
+    defb 0x00, 0x40, 0x40, 0xC0, 0x60, 0x40, 0xC0, 0x60  ; f3: diagonal bumps
 
-EnemyShot_SpritePatternsPlunger:
-    defb 0xF, 0xE, 0xD, 0xB
+EnemyShot_SpriteRowsPlunger:
+    defb 0x00, 0x00, 0xE0, 0x40, 0x40, 0x40, 0x40, 0x40  ; f0: head at top
+    defb 0x00, 0x00, 0x40, 0x40, 0xE0, 0x40, 0x40, 0x40  ; f1: head mid-upper
+    defb 0x00, 0x00, 0x40, 0x40, 0x40, 0xE0, 0x40, 0x40  ; f2: head mid-lower
+    defb 0x00, 0x00, 0x40, 0x40, 0x40, 0x40, 0x40, 0xE0  ; f3: head at bottom
 
-EnemyShot_SpritePatternsSquiggly:
-    defb 0xA, 0x5, 0x6, 0x9
+EnemyShot_SpriteRowsSquiggly:
+    defb 0x00, 0x40, 0x80, 0x40, 0x20, 0x40, 0x80, 0x40  ; f0
+    defb 0x00, 0x20, 0x40, 0x80, 0x40, 0x20, 0x40, 0x80  ; f1
+    defb 0x00, 0x40, 0x20, 0x40, 0x80, 0x40, 0x20, 0x40  ; f2
+    defb 0x00, 0x80, 0x40, 0x20, 0x40, 0x80, 0x40, 0x20  ; f3
 
 ; ===== Column-Firing Table =====
 ; Plunger column-firing table — indices 00-0F of original ColFireTable ($1D00).

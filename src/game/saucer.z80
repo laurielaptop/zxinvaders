@@ -342,11 +342,11 @@ Saucer_GetScore:
     
     ; Check if past end of table (wrap around)
     ld a, h
-    cp HIGH(SaucerScoreTable + 16)
+    cp (SaucerScoreTable + 16) >> 8
     jr nz, Saucer_GetScore_NoWrap
     
     ld a, l
-    cp LOW(SaucerScoreTable + 16)
+    cp (SaucerScoreTable + 16) & 255
     jr nz, Saucer_GetScore_NoWrap
     
     ; Wrap to beginning

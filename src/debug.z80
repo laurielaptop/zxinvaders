@@ -12,6 +12,39 @@ Debug_ShowShotCreated:
     ret
 
 Debug_UpdateShotActive:
+    ; Telemetry: border turns red when any active enemy shot is below shields.
+    ; This helps distinguish logic deactivation from render visibility issues.
+    ld hl, ENEMY_SHOT_LIST_BASE
+    ld b, MAX_ENEMY_SHOTS
+.scan_loop:
+    push bc
+    push hl
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de
+    ld a, (hl)
+    pop hl
+    or a
+    jr z, .next_slot
+
+    inc hl                      ; Y
+    ld a, (hl)
+    cp SHIELD_BASE_Y + SHIELD_HEIGHT
+    jr nc, .below_shields
+
+.next_slot:
+    pop bc
+    ld de, ENEMY_SHOT_OBJ_SIZE
+    add hl, de
+    djnz .scan_loop
+
+    xor a                       ; black border
+    out (254), a
+    ret
+
+.below_shields:
+    pop bc
+    ld a, 2                     ; red border
+    out (254), a
     ret
 
 Debug_UpdateShields:

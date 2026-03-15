@@ -143,7 +143,7 @@ Shot_EraseMaskReady:
     cpl                     ; Invert so target bit becomes 0, others stay 1
     ld d, a
 
-    ; Erase 4-pixel vertical line (only clear the shot bit)
+    ; Erase the player shot footprint (only clear the shot bit)
     ld b, SHOT_HEIGHT
 Shot_ErasePixelLoop:
     ld a, h
@@ -207,13 +207,19 @@ Shot_DrawMaskReady:
 
 Shot_DrawPixels:
     ld b, SHOT_HEIGHT
+    ld ix, PlayerShotRows
 Shot_DrawPixelLoop:
     ld a, h
     cp 0x58
     jr nc, Shot_DrawDone
+    ld a, (ix+0)
+    inc ix
+    or a
+    jr z, Shot_DrawNextPixel
     ld a, (hl)              ; Read current byte
     or d                    ; Set the shot pixel
     ld (hl), a              ; Write back
+Shot_DrawNextPixel:
     call Shot_NextScanline  ; Move to next scan line in ZX bitmap layout
     djnz Shot_DrawPixelLoop
 Shot_DrawDone:
@@ -266,3 +272,6 @@ Shot_NextScanline:
     sub 0x08
     ld h, a
     ret
+
+PlayerShotRows:
+    db 0, 0, 0, 0, 1, 1, 1, 1

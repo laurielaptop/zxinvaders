@@ -75,7 +75,7 @@ PLAYER_Y_DEFAULT: equ 176  ; Keep full sprite visible above bottom HUD area
 MAX_SHOTS: equ 1           ; Player can have 1 shot on screen
 SHOT_SPEED: equ 6          ; Pixels per frame
 SHOT_WIDTH: equ 1          ; 1 pixel wide (single bit)
-SHOT_HEIGHT: equ 4         ; 4 pixels tall
+SHOT_HEIGHT: equ 8         ; Source-derived player shot height
 SHOT_LIST_BASE: equ GAME_RAM_BASE + 200
 
 ; Shot object structure (4 bytes per shot)
@@ -88,8 +88,8 @@ SHOT_OBJ_SIZE: equ 4
 ; Enemy shots
 MAX_ENEMY_SHOTS: equ 3
 ENEMY_SHOT_SPEED: equ 3    ; Pixels per frame (compensates for phase-gated family updates)
-ENEMY_SHOT_WIDTH: equ 1
-ENEMY_SHOT_HEIGHT: equ 4
+ENEMY_SHOT_WIDTH: equ 3
+ENEMY_SHOT_HEIGHT: equ 8
 ENEMY_SHOT_LIST_BASE: equ GAME_RAM_BASE + 210
 
 ENEMY_SHOT_FAMILY_ROLLING: equ 0

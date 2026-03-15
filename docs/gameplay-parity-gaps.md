@@ -80,3 +80,9 @@ Note: original logic initializes **4 shields** (`LD C,$04` at `resources/source.
 ## Open Decision
 
 - Strict arcade parity uses 4 shields. If we intentionally want 3 for ZX design reasons, decide now and note deviation in docs.
+
+## Known Issues (Current)
+
+- Enemy-shot lower-field traversal is inconsistent: some shots pass shield gaps and can kill the player, while many stop progressing visually/functionally before the player area.
+- Enemy-shot family behavior appears stateful across player deaths: initial waves show rolling+squiggly, then some lives switch to mostly/only plunger, and later deaths can switch back.
+- Enemy-shot sprite cleanup has regressions: residual shot pixels/trails can remain on screen after movement.
