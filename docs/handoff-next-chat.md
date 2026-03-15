@@ -12,22 +12,22 @@ Player sprite parity is now complete. This handoff captures the verified end sta
 - Root cause of prior player corruption was a renderer bug: `Player_Draw` reused `DE` as both sprite-table pointer and row-data storage.
 
 ## Current repository state
-- Latest relevant commit on `main`: `170e324` — lock final player sprite parity implementation.
+- Latest relevant commit on `main`: `022af87` — ignore local VS Code settings.
 - Working tree should be clean apart from any local editor metadata such as `.vscode/`.
 
 ## Highest-value remaining work
-1. Resolve intermittent attribute-memory corruption (`0x5800..0x5AFF` writes causing random colored squares).
-2. Replace placeholder shot/shield/saucer graphics with source-derived monochrome sprite tables.
+1. Continue monitoring the historical attribute-memory corruption issue; it was not reproduced during the latest player-parity and shield-art session.
+2. Replace remaining placeholder shot/saucer graphics with source-derived monochrome sprite tables and complete shield degradation parity.
 3. Tighten enemy-shot parity from functional to visual/timing polish (source-matched shot art, ISR-timed precision later).
 
 ## Important technical facts confirmed
 1. `make run-zesarux` rebuilds/package-runs the latest TAP correctly.
 2. `Player_NextScanline` / `PlayerHit_NextScanline` fixes are required to avoid attribute RAM spill during tall sprite stepping.
 3. Player parity is solved; do not reopen table-orientation experiments unless new evidence appears.
-4. The main unresolved cross-cutting graphics bug is attribute-memory corruption elsewhere in active render paths.
+4. Shields now use source-derived intact art; remaining shield work is degradation/collision parity.
 
 ## Recommended next chat focus
-Start with the attribute-square issue. Audit remaining sprite draw/erase loops for raw `inc h` stepping or missing `H < 0x58` guards, then verify in gameplay.
+Continue with source-derived shot or saucer graphics, while keeping an eye out for any recurrence of attribute-memory corruption during testing.
 
 ## Suggested first prompt for the new chat
-"Use `docs/handoff-next-chat.md` as the starting context. Player sprite parity is complete; focus next on the remaining attribute-memory corruption issue, then move to source-derived shot/shield/saucer graphics." 
+"Use `docs/handoff-next-chat.md` as the starting context. Player sprite parity is complete and intact shield art is now ROM-derived; continue with source-derived shot or saucer graphics and keep monitoring for any attribute-memory corruption recurrence." 

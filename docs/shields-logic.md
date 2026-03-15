@@ -95,6 +95,14 @@ Screen shields:   0x2806 (and +0x02E0 for each of 4 shields)
 
 ## ZX Spectrum Adaptation
 
+### Current Status (March 2026)
+
+- Shield placement and erase/draw cadence are implemented.
+- Intact shield artwork now uses ROM-derived `ShieldImage` bytes from `resources/source.z80:1D20`.
+- Current in-game intact shield geometry: 24x16 pixels (3 bytes/row), matching the validated emulator silhouette.
+- Orientation is locked in `ShieldImageZX` and should not be reworked unless new visual evidence appears.
+- Remaining gap: damage/collision degradation is still simplified and does not yet erode the shield shape.
+
 ### Constraints
 
 1. **Memory**: ZX bitmap is non-linear; screen row offset is 0x0100 (256), not 0x0020 (32) as in arcade.
@@ -114,26 +122,26 @@ Screen shields:   0x2806 (and +0x02E0 for each of 4 shields)
 ```z80
 ; Shields
 SHIELD_COUNT: equ 4
-SHIELD_ROWS: equ 22
-SHIELD_COLS: equ 2
-SHIELD_HEIGHT: equ 16      ; Visual representation on ZX
-SHIELD_WIDTH: equ 16       ; Visual representation on ZX
+SHIELD_ROWS: equ 16
+SHIELD_COLS: equ 3
+SHIELD_HEIGHT: equ 16      ; Intact shield silhouette height on ZX
+SHIELD_WIDTH: equ 24       ; Intact shield silhouette width on ZX
 SHIELD_DAMAGE_STAGES: equ 4 ; 0=intact, 1=1bite, 2=2bites, 3=destroyed
 SHIELD_BASE_Y: equ 144     ; Y position (above player, below aliens)
-SHIELD_BASE_X: equ 32      ; Start X position
+SHIELD_BASE_X: equ 28      ; Start X position (center alignment after widening)
 
 ; Shield state: one byte per shield (damage level)
 SHIELD_STATE: equ GAME_RAM_BASE + 240    ; 4 bytes
 ```
 
-### Proposed ZX Implementation File
+### ZX Implementation File
 
-Create `src/game/shields.z80`:
+`src/game/shields.z80` currently provides:
 - `Shields_Init`: Initialize 4 shields to full state
-- `Shields_Draw`: Draw all 4 shields based on damage state
+- `Shields_Draw`: Draw all 4 shields using ROM-derived intact bitmap data
 - `Shields_Erase`: Erase shields before redraw
 - `Shields_OnCollision`: Increment damage when shot hits shield
-- `Shields_CheckCollision`: Test if projectile collides with shields
+- `Shields_CheckCollision`: Test if projectile collides with shields (still TODO)
 - `Shields_Reset`: Restore all shields to full state (level/game reset)
 
 ## Integration Points

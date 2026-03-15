@@ -12,7 +12,7 @@ This note captures missing gameplay elements that must be documented from `resou
 
 ## Current ZX Status (March 2026)
 
-- Shields: COMPLETE (4 shields with erase/draw cycle, proper 48-pixel spacing)
+- Shields: PARTIAL (4 shields with correct spacing and ROM-derived intact bitmap; damage/degradation behavior remains simplified)
 - Saucer/UFO: COMPLETE (tuned 256-loop countdown for current busy-wait pacing, horizontal movement with direction logic, score table 50/100/150/300, hit detection, explosion sequence)
 - Alien shot families: FUNCTIONALLY COMPLETE (rolling/plunger/squiggly scheduling, reload gating, targeting rules, and interleaved motion are implemented; sprite art parity still remains)
 - Alien row graphics/animation: COMPLETE (row type A/B/C mapping and 2-frame animation from ROM-derived tables)
@@ -75,7 +75,7 @@ Note: original logic initializes **4 shields** (`LD C,$04` at `resources/source.
 - Original render path semantics (`DrawSprite`, `DrawShiftedSprite`, `EraseShifted`, collision draw) are documented.
 - Alien tables are now migrated from source ROM blocks using deterministic transform tooling.
 - Player sprite parity is now complete using ROM-derived source bytes with a locked `rot90cw` transform for the current ZX renderer.
-- Next implementation can proceed module-by-module for saucer/shields/shots, with attribute-memory corruption still the main cross-cutting stability issue.
+- Next implementation can proceed module-by-module for saucer/shots, with shield degradation and remaining sprite-family art still open.
 
 ## Open Decision
 

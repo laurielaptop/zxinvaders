@@ -235,8 +235,9 @@ Reference:
 - `src/game/saucer.z80:511`
 
 ### 3.4 Shields
-- Current: solid block placeholder draw/erase.
-- Needed: true `ShieldImage`-derived pattern and per-pixel degradation.
+- Current: intact shield art now uses ROM-derived `ShieldImage` source bytes from `resources/source.z80:1D20`, adapted to a 24x16 ZX silhouette for the current renderer.
+- Locked orientation: `rot90cw+vflip` source transform, centered in 24px, with final in-game row-orientation adjustment validated against emulator screenshots.
+- Remaining gap: shield damage/degradation is still simplified and does not yet follow arcade erosion behavior.
 
 Reference:
 - `src/game/shields.z80:49`

@@ -20,6 +20,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Gameplay pacing has been tuned up again** for broader responsiveness: `Timing_WaitShort` loop reduced to 2800, alien march delay reduced to 7, player shot speed increased to 6, enemy shot speed increased to 3, and enemy family fire delay reduced to 18.
 - **Player sprite corruption root cause identified**: `Player_Draw` was clobbering the sprite-table pointer by reusing `DE` for both pointer state and row bytes, producing random dot/line output regardless of table choice. The draw path now keeps the pointer separate.
 - **Player sprite parity is now complete**: the final player sprite is locked to the ROM-derived `PlayerSprite` data from `resources/source.z80:1C60`, using the `rot90cw` transform for the current ZX renderer.
+- **Shield intact-art parity is now locked**: shields draw from ROM-derived `ShieldImage` data (`resources/source.z80:1D20`) adapted to the current 24x16 ZX renderer and validated in emulator. Damage/degradation logic is still simplified.
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 - **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
 - **Alien sprite parity is complete** (ROM-derived A/B/C row families, 2-frame animation, deterministic transform pipeline).
@@ -96,7 +97,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
    - Current understanding: this indicates unintended writes into attribute memory (`0x5800-0x5AFF`).
    - Current primary suspect: legacy sprite scanline stepping using raw `inc h` in draw/erase loops.
    - Progress (2026-03-15): player-shot and saucer draw/erase paths now use ZX-correct scanline stepping and include temporary bitmap write guards (`H < 0x58`).
-   - Status: partially mitigated; still unresolved until gameplay confirms no remaining attribute corruption.
+   - Status: not reproduced during the current player-parity and shield-art session. Keep this under observation until repeated gameplay sessions confirm the issue is gone.
 
 ### Immediate Stabilization Plan (Short)
 1. Remove all remaining unsafe bitmap scanline stepping (`inc h`-only loops) from active gameplay render paths.
@@ -109,6 +110,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - Alien shot system now implements three-family scheduling and gameplay behavior, but still uses simplified pixel art rather than fully source-matched shot sprites.
 - Alien rendering now uses row-specific arcade-derived sprite families and frame toggling.
 - Player sprite now matches the original silhouette in-game using ROM-derived data with the locked `rot90cw` transform.
+- Shields now use ROM-derived intact artwork, but shield damage/collision degradation remains simplified.
 - Sprite source mapping and render/animation behavior are now documented in `docs/graphics-animation-parity.md`.
 - Explosion animation parity is partial: player and alien explosions are in place; remaining parity gaps are secondary shot/saucer side-effect details.
 
@@ -144,10 +146,10 @@ Target documents to produce/extend next:
    - ISR timing scaffold (2026-03-15): `TIMING_FRAME_PHASE` now ticks 0->1->2 each frame in `Timing_WaitShort`, and `EnemyShot_TryFire` now samples that phase for family selection while retaining the stable 20-frame global fire gate.
    - Slice 8 (2026-03-15): `EnemyShot_Update` now advances only the family matching `TIMING_FRAME_PHASE` each frame (rolling/plunger/squiggly interleave), moving shot motion closer to original staggered scheduler behavior.
    - Follow-up parity polish remains: ISR-timed scheduling precision and fully source-matched shot pixel art in a wider shifted-sprite renderer path.
-2. Resolve the **attribute-square known issue** (unexpected writes into attribute RAM during gameplay).
+2. Continue monitoring the **attribute-square issue** across repeated gameplay sessions; it was not reproduced during the current player-parity and shield-art work.
 3. Revisit/complete shields parity details (damage/collision behavior remains simplified).
 4. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.
-5. Replace placeholder saucer/shield/shot graphics with source-derived monochrome sprite tables.
+5. Replace remaining placeholder saucer/shot graphics with source-derived monochrome sprite tables.
 6. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
 7. End-phase optimization: ISR-synchronized rendering to reduce flicker.
 8. Audio pass: fire, hit, and alien movement sound effects.

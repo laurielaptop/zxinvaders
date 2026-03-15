@@ -2,11 +2,7 @@
 ; Based on 8080 arcade logic (4 shields, damage degradation)
 ; Tutorial principles applied:
 ; - Proper screen address calculation with character row handling
-; - Attribute support for visible colored shields
 ; - Erase/draw cycle in main loop for proper animation
-
-; Shield color attribute: bright cyan on black (0x85)
-SHIELD_ATTR: equ 0x85
 
 ; Shields_Init
 ; Initialize 4 shields to full/undamaged state
@@ -46,12 +42,14 @@ Shields_Draw:
 
 ; Shield_DrawBlock
 ; Draw a single shield block at (B=X, C=Y)
-; Simple version: just draw the bitmap solid
+; Current parity slice uses a monochrome intact shield silhouette.
 Shield_DrawBlock:
     push bc
     push de
+    push ix
     
-    ld d, SHIELD_HEIGHT      ; D = rows to draw (16 rows)
+    ld ix, ShieldImageZX
+    ld d, SHIELD_HEIGHT      ; D = rows to draw
     ld e, c                  ; E = Y counter
     
 .draw_rows:
@@ -59,15 +57,23 @@ Shield_DrawBlock:
     ld c, e                  ; C = Y  
     call Video_CalcAddress   ; HL = bitmap address
     
-    ld a, 0xFF
-    ld (hl), a               ; Draw 8 pixels
+    ld a, (ix+0)
+    ld (hl), a               ; Draw first 8 pixels
     inc hl
-    ld (hl), a               ; Draw another 8 pixels (16 total)
+    ld a, (ix+1)
+    ld (hl), a               ; Draw second 8 pixels
+    inc hl
+    ld a, (ix+2)
+    ld (hl), a               ; Draw third 8 pixels
+    inc ix
+    inc ix
+    inc ix
     
     inc e                    ; Next row
     dec d
     jr nz, .draw_rows
-    
+
+    pop ix
     pop de
     pop bc
     ret
@@ -98,7 +104,7 @@ Shields_Erase:
 
 ; Shield_EraseBlock
 ; Erase a single shield block at (B=X, C=Y)
-; Simple version: just clear the bitmap
+; Erase current intact shield bitmap area
 Shield_EraseBlock:
     push bc
     push de
@@ -112,14 +118,16 @@ Shield_EraseBlock:
     call Video_CalcAddress   ; HL = screen address
     
     xor a                    ; A = 0x00 (black)
-    ld (hl), a               ; Clear 8 pixels
+    ld (hl), a               ; Clear first 8 pixels
     inc hl
-    ld (hl), a               ; Clear another 8 pixels
+    ld (hl), a               ; Clear second 8 pixels
+    inc hl
+    ld (hl), a               ; Clear third 8 pixels
     
     inc e                    ; Next row
     dec d
     jr nz, .erase_rows
-    
+
     pop de
     pop bc
     ret
@@ -165,3 +173,26 @@ Mult_A_By_B:
     djnz .mult_loop
     pop bc
     ret
+
+; Shield silhouette derived from ROM ShieldImage at 1D20 (resources/source.z80).
+; Transform: rot90cw+vflip on the 22x16 ROM bitmap, centred in 24px (1px each side),
+; then mirrored horizontally, with only the upper 8-row band flipped on the
+; horizontal axis to match validated in-game top-cap orientation.
+; 24x16, packed as 3 bytes per row.
+ShieldImageZX:
+    db 0x07, 0xFF, 0xE0
+    db 0x0F, 0xFF, 0xF0
+    db 0x1F, 0xFF, 0xF8
+    db 0x3F, 0xFF, 0xFC
+    db 0x7F, 0xFF, 0xFE
+    db 0x7F, 0xFF, 0xFE
+    db 0x7F, 0xFF, 0xFE
+    db 0x7F, 0xFF, 0xFE
+    db 0x7F, 0xFF, 0xFE
+    db 0x7F, 0xFF, 0xFE
+    db 0x7F, 0xFF, 0xFE
+    db 0x7F, 0xFF, 0xFE
+    db 0x7F, 0x01, 0xFE
+    db 0x7E, 0x00, 0xFE
+    db 0x7C, 0x00, 0x7E
+    db 0x7C, 0x00, 0x7E
