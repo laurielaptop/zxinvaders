@@ -199,7 +199,7 @@ EnemyShot_CheckReloadGuardValue:
     ; Input: A = other-shot step count
     ; Output: A = 1 if allowed, A = 0 if blocked
     or a
-    jr z, .allow
+    jr z, .update_allow
     ld b, a
     ld a, (ENEMY_SHOT_RELOAD_RATE)
     cp b
@@ -275,6 +275,35 @@ EnemyShot_ClearStepCounterForSlot:
     xor a
     ld (de), a
     pop de
+    ret
+
+EnemyShot_ShouldUpdateSlotThisFrame:
+    ; Input: B = update-loop slot counter (3,2,1)
+    ; Output: A = 1 if this slot's family should advance on current frame phase
+    ld a, (TIMING_FRAME_PHASE)
+    or a
+    jr nz, .phase_not_0
+    ld a, b
+    cp MAX_ENEMY_SHOTS
+    jr z, .update_allow
+    xor a
+    ret
+.phase_not_0:
+    cp ENEMY_SHOT_FAMILY_PLUNGER
+    jr nz, .phase_squiggly
+    ld a, b
+    cp MAX_ENEMY_SHOTS - 1
+    jr z, .update_allow
+    xor a
+    ret
+.phase_squiggly:
+    ld a, b
+    cp MAX_ENEMY_SHOTS - 2
+    jr z, .allow
+    xor a
+    ret
+.update_allow:
+    ld a, 1
     ret
 
 EnemyShot_AdvanceSyncPhase:
@@ -488,6 +517,11 @@ EnemyShot_UpdateLoop:
     pop hl
     or a
     jr z, EnemyShot_UpdateNext   ; Inactive
+
+    ; ISR-style parity step: only advance one family per frame phase.
+    call EnemyShot_ShouldUpdateSlotThisFrame
+    or a
+    jr z, EnemyShot_UpdateNext
     
     ; Move shot downward
     push hl

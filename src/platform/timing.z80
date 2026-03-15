@@ -11,7 +11,7 @@ Timing_WaitFrame_Loop:
     ret
 Timing_WaitShort:
     ; Much shorter wait for testing (avoids long busy loops)
-    ld bc, 3500
+    ld bc, 2800
 Timing_WaitShort_Loop:
     dec bc
     ld a, b

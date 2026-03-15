@@ -42,7 +42,7 @@ ALIEN_WIDTH: equ 16
 ALIEN_HEIGHT: equ 8
 
 ; Movement constants
-ALIEN_MOVE_DELAY: equ 8    ; Frames between moves (slower = higher)
+ALIEN_MOVE_DELAY: equ 7    ; Frames between moves (slower = higher)
 ALIEN_STEP_DOWN: equ 8     ; Pixels to step down at edges
 ALIEN_EDGE_LEFT: equ 8     ; Left screen boundary
 ALIEN_EDGE_RIGHT: equ 72   ; Right boundary (256 - 176 formation width - 8 margin)
@@ -73,7 +73,7 @@ PLAYER_Y_DEFAULT: equ 176  ; Keep full sprite visible above bottom HUD area
 
 ; ===== Projectile Management =====
 MAX_SHOTS: equ 1           ; Player can have 1 shot on screen
-SHOT_SPEED: equ 5          ; Pixels per frame
+SHOT_SPEED: equ 6          ; Pixels per frame
 SHOT_WIDTH: equ 1          ; 1 pixel wide (single bit)
 SHOT_HEIGHT: equ 4         ; 4 pixels tall
 SHOT_LIST_BASE: equ GAME_RAM_BASE + 200
@@ -87,7 +87,7 @@ SHOT_OBJ_SIZE: equ 4
 
 ; Enemy shots
 MAX_ENEMY_SHOTS: equ 3
-ENEMY_SHOT_SPEED: equ 2    ; Pixels per frame (slower than player)
+ENEMY_SHOT_SPEED: equ 3    ; Pixels per frame (compensates for phase-gated family updates)
 ENEMY_SHOT_WIDTH: equ 1
 ENEMY_SHOT_HEIGHT: equ 4
 ENEMY_SHOT_LIST_BASE: equ GAME_RAM_BASE + 210
@@ -105,7 +105,7 @@ ENEMY_SHOT_OBJ_SIZE: equ 4
 
 ; Enemy shot timing
 ENEMY_SHOT_COUNTER: equ GAME_RAM_BASE + 128
-ENEMY_SHOT_FIRE_DELAY: equ 20  ; Frames between family fire attempts (with 3-family rotation)
+ENEMY_SHOT_FIRE_DELAY: equ 18  ; Frames between family fire attempts (with 3-family rotation)
 ENEMY_SHOT_SYNC_PHASE: equ GAME_RAM_BASE + 194 ; 0..2 scheduler phase (rolling/plunger/squiggly style interleave)
 ENEMY_SHOT_RELOAD_RATE: equ GAME_RAM_BASE + 195 ; Source-style dynamic reload value (currently scaffolded)
 ENEMY_SHOT_STEP_COUNTER_BASE: equ GAME_RAM_BASE + 196

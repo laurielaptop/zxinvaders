@@ -275,7 +275,11 @@ Our Spectrum port uses a **simplified single-shot-type system** with the core co
    - 3 concurrent family slots maximum (one per family)
    - Simpler than full ISR-driven synchronization timing
 
-4. **Family-specific visuals**
+4. **Phase-gated movement scheduling**
+   - Active families are advanced on their matching frame phase only (0=rolling, 1=plunger, 2=squiggly)
+   - Produces staggered per-family motion updates instead of lockstep movement
+
+5. **Family-specific visuals**
    - Distinct 4-frame row-mask animation per family (rolling/plunger/squiggly)
    - Drawn through the stable 1-bit-per-row renderer path
 
@@ -293,7 +297,7 @@ EnemyShot_TryFire:
    ld (ENEMY_SHOT_SYNC_PHASE), a
    call EnemyShot_SelectFamilySlot
     
-    ; Find available shot slot (2 slots max)
+   ; Use dedicated family slot (3 slots total: rolling/plunger/squiggly)
     ; Get next column from firing table
     ; Search column bottom-to-top for alive alien
     ; Calculate position below alien
@@ -311,11 +315,11 @@ EnemyShot_PickAlienForFamily:
 | Feature | Original Arcade | ZX Spectrum Port (current) |
 |---------|----------------|----------------------------|
 | Shot types | 3 (rolling, plunger, squiggly) | 3 dedicated family slots ✅ |
-| Synchronization | Timer cycle 0→1→2, ISR-based | Round-robin phase + step-counter spacing ✅ |
+| Synchronization | Timer cycle 0→1→2, ISR-based | Frame-phase family selection + phase-gated movement ✅ |
 | Reload rate | Score-based dynamic rate | Score-based (16-bit threshold) ✅ |
-| Column tables | Two tables, 16/21 entries | One shared 16-entry table (squiggly pending) |
-| Alien selection | FindInColumn per shot type | Shared FindInColumn (rolling targeting pending) |
-| Animation | 4-frame sprite cycles | Static single pixel (sprite families pending) |
+| Column tables | Two tables, 16/21 entries | Family tables with independent pointers/wrap ✅ |
+| Alien selection | FindInColumn per shot type | Shared FindInColumn + rolling player targeting ✅ |
+| Animation | 4-frame sprite cycles | Family-specific 4-frame row-mask animation ✅ |
 | Max shots | 3 (one per type) | 3 (one per family slot) ✅ |
 
 ### Development Debug Visualizer
@@ -350,11 +354,12 @@ Important implementation note:
   `Debug_ShowFireCounter` must preserve `A`, because `EnemyShot_TryFire` compares
   `A` against `ENEMY_SHOT_FIRE_DELAY` immediately after the debug call.
 
-### Task 3 Status (Slices 4–7)
+### Task 3 Status (Slices 4–8)
 1. **Slice 4**: Plunger one-alien-left suppression is implemented (`ALIEN_COUNT_REMAINING <= 1` blocks plunger spawn).
 2. **Slice 5**: Rolling shot player-column targeting is implemented (player-center-to-rack-column mapping, clamped 0..10).
 3. **Slice 6**: Squiggly independent 15-entry column table is implemented with its own pointer/wrap.
 4. **Slice 7**: Family-specific four-frame animation is implemented in the current 1-bit-per-row renderer.
+5. **Slice 8**: Movement updates are now frame-phase gated so only one family advances per frame (0 rolling, 1 plunger, 2 squiggly), matching staggered scheduler semantics more closely.
 
 ## Verified Behavior for Slices 4-6 (Source Analysis, 2026-03-15)
 

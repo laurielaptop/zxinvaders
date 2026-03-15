@@ -17,6 +17,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Task 2 (wave-clear detection) is complete**: when all 55 aliens are killed, the screen clears and a full new wave spawns with shields regenerated and the formation starting 8 pixels lower each wave (cycling over 8 waves). Lives and score carry over. See `docs/wave-clear-logic.md`.
 - **Task 3 (enemy-shot families, Slices 1–7) is functionally complete**: enemy fire now runs as three dedicated families (rolling/plunger/squiggly) with round-robin scheduling, score-based reload gating, plunger one-alien-left suppression, rolling player-column targeting, squiggly independent table wrap, and family-specific 4-frame row-mask animation in the current renderer. Alien scoring updates the full 16-bit score total. Two implementation regressions (TryFire stack corruption and Update loop stack leak) were fixed; gameplay is stable.
 - **Gameplay pacing has been tuned up slightly** for iteration: shorter main-loop wait (`Timing_WaitShort`) and faster player shot speed (`SHOT_SPEED=5`).
+- **Gameplay pacing has been tuned up again** for broader responsiveness: `Timing_WaitShort` loop reduced to 2800, alien march delay reduced to 7, player shot speed increased to 6, enemy shot speed increased to 3, and enemy family fire delay reduced to 18.
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 - **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
 - **Alien sprite parity is complete** (ROM-derived A/B/C row families, 2-frame animation, deterministic transform pipeline).
@@ -141,6 +142,7 @@ Target documents to produce/extend next:
    - Slices 4–7 implemented: plunger suppression, rolling targeting, squiggly independent table, family-specific 4-frame row-mask animation.
    - Cadence tune (2026-03-15): global family fire-attempt gate reduced from 60 to 20 frames to better match three-family scheduling density while retaining stable guard logic.
    - ISR timing scaffold (2026-03-15): `TIMING_FRAME_PHASE` now ticks 0->1->2 each frame in `Timing_WaitShort`, and `EnemyShot_TryFire` now samples that phase for family selection while retaining the stable 20-frame global fire gate.
+   - Slice 8 (2026-03-15): `EnemyShot_Update` now advances only the family matching `TIMING_FRAME_PHASE` each frame (rolling/plunger/squiggly interleave), moving shot motion closer to original staggered scheduler behavior.
    - Follow-up parity polish remains: ISR-timed scheduling precision and fully source-matched shot pixel art in a wider shifted-sprite renderer path.
 2. Resolve the **attribute-square known issue** (unexpected writes into attribute RAM during gameplay).
 3. Revisit/complete shields parity details (damage/collision behavior remains simplified).
