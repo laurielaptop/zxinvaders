@@ -7,9 +7,7 @@ Player_Init:
     ld hl, GAME_RAM_BASE + PLAYER_OBJ_OFFSET
     
     ; X position (center of screen)
-    ld a, 128
-    call Player_ApplyDebugByteAlign
-    ld (hl), a
+    ld (hl), 128
     inc hl
     
     ; Y position (near bottom)
@@ -67,7 +65,6 @@ Player_CheckRight:
     ld a, PLAYER_MAX_X
     
 Player_StoreX:
-    call Player_ApplyDebugByteAlign
     ld (hl), a
     
 Player_CheckFire:
@@ -90,16 +87,6 @@ Player_ClearFire:
     ld (hl), 0
     
 Player_UpdateDone:
-    ret
-
-Player_ApplyDebugByteAlign:
-    ; Temporary player-parity debug mode: force byte alignment to bypass shifted draw path.
-    ld d, a
-    ld a, PLAYER_DEBUG_BYTE_ALIGN
-    or a
-    ld a, d
-    ret z
-    and 0xF8
     ret
 
 Player_Erase:
@@ -174,24 +161,18 @@ Player_Draw:
     and 0x07
     ld c, a
     
-    ; Draw selected player sprite candidate table (16x8)
-    ld de, PLAYER_SHIP_CW_A
-    ld a, PLAYER_SPRITE_TABLE_SELECT
-    or a
-    jr z, Player_DrawTableSelected
-    ld de, PLAYER_SHIP_CW_B
-Player_DrawTableSelected:
+    ; Draw locked ROM-derived player sprite (16x8)
+    ld ix, PLAYER_SHIP_CW
     ld b, PLAYER_HEIGHT
     
 Player_DrawLoop:
     ; Source row is 16 pixels packed as two bytes.
-    ld a, (de)
-    inc de
+    ld a, (ix+0)
     ld d, a                     ; High source byte
-    ld a, (de)
-    inc de
+    ld a, (ix+1)
     ld e, a                     ; Low source byte
-    push de                     ; Preserve sprite pointer
+    inc ix
+    inc ix
     push bc                     ; Preserve row counter and bit offset
 
     ; If byte-aligned, write two bytes.
@@ -242,7 +223,6 @@ Player_ShiftLeftLowLoop:
     dec l
 
     pop bc
-    pop de
     jr Player_DrawNextRow
 
 Player_DrawAligned:
@@ -253,7 +233,6 @@ Player_DrawAligned:
     ld (hl), a
     dec l
     pop bc
-    pop de
 
 Player_DrawNextRow:
     call Player_NextScanline

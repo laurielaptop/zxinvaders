@@ -1,13 +1,8 @@
 ; Arcade-source player sprite table for ZX renderer.
-; Bitmap extracted from resources/gameplay.gif (player component at x=103..115, y=208..215),
-; then padded to 16x8 for this renderer.
+; Source bytes: PlayerSprite at resources/source.z80:1C60.
+; Locked transform for the current renderer: rot90cw.
 ; Output geometry: 16x8 (2 bytes per row, 8 rows).
 
-PLAYER_SHIP_CW_A:
+PLAYER_SHIP_CW:
     db 0x01, 0x00, 0x03, 0x80, 0x03, 0x80, 0x3F, 0xF8
     db 0x7F, 0xFC, 0x7F, 0xFC, 0x7F, 0xFC, 0x7F, 0xFC
-
-; Candidate B keeps the same rows but swaps the two bytes per row.
-PLAYER_SHIP_CW_B:
-    db 0x00, 0x01, 0x80, 0x03, 0x80, 0x03, 0xF8, 0x3F
-    db 0xFC, 0x7F, 0xFC, 0x7F, 0xFC, 0x7F, 0xFC, 0x7F

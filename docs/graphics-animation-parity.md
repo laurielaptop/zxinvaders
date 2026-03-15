@@ -212,10 +212,10 @@ Reference:
 ## 3. Current ZX State vs Required Parity
 
 ### 3.1 Player
-- Current: source-derived player tables have been tried (ROM and GIF extraction), but in-game silhouette is still incorrect.
-- Key finding: a row-stepping bug that could write into attribute RAM was fixed via safe `NextScanline` logic.
-- Remaining issue: shifted draw/compositing and/or row byte-order interpretation for player path.
-- Next: isolate with byte-aligned draw mode and lock one table/byte order before any further transform experiments.
+- Current: complete. The live player sprite now uses ROM-derived `PlayerSprite` bytes from `resources/source.z80:1C60`.
+- Locked transform for the current ZX renderer: `rot90cw`.
+- Root cause of prior corruption: `Player_Draw` reused `DE` as both the sprite-table pointer and row data storage, self-corrupting the pointer and producing random dot/line output.
+- Supporting fix retained: ZX-correct `NextScanline` stepping prevents row writes from spilling into attribute RAM.
 
 Reference:
 - `src/game/player.z80:209`

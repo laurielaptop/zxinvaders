@@ -67,8 +67,6 @@ GAME_MODE_GAME_OVER: equ 2
 ; ===== Player Sprite Parameters =====
 PLAYER_WIDTH: equ 16
 PLAYER_HEIGHT: equ 8
-PLAYER_DEBUG_BYTE_ALIGN: equ 0 ; 1=force player X to 8-pixel alignment (no shifted draw path)
-PLAYER_SPRITE_TABLE_SELECT: equ 0 ; 0=candidate A (current), 1=candidate B (byte-swapped rows)
 PLAYER_MIN_X: equ 0
 PLAYER_MAX_X: equ 239      ; Keep one byte margin for shifted three-byte sprite draw
 PLAYER_Y_DEFAULT: equ 176  ; Keep full sprite visible above bottom HUD area
