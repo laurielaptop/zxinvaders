@@ -520,16 +520,13 @@ EnemyShot_UpdateLoop:
     or a
     jr z, EnemyShot_UpdateNext   ; Inactive
 
-    ; ISR-style parity step: only advance one family per frame phase.
-    call EnemyShot_ShouldUpdateSlotThisFrame
-    or a
-    jr z, EnemyShot_UpdateNext
-    
-    ; Move shot downward
+    ; Move active shots every frame.
+    ; Family selection is handled in TryFire; movement should not be phase-gated.
     push hl
     inc hl                       ; Point to Y
     ld a, (hl)
     add a, ENEMY_SHOT_SPEED
+    jr c, EnemyShot_UpdateDeactivateFromMove ; Wrapped past 255: end this shot immediately.
     ld (hl), a
     ld c, a                      ; Keep updated Y for bounds check
     pop hl
@@ -542,13 +539,29 @@ EnemyShot_UpdateLoop:
     ld (de), a
     pop hl
     
-    ; Keep shot active deep into the lower area so it cannot vanish before
-    ; reaching the player band due to lifetime culling.
-    ; Rendering already clips to the visible bitmap.
+    ; Source-parity behavior: once a shot has moved below the visible field,
+    ; retire it quickly so families don't keep invisible shots alive.
+    ; Retire at Y >= 192 (matches rendering boundary where shots stop drawing).
     ld a, c
-    cp 248
+    cp 192
     jr c, EnemyShot_UpdateOK
-    
+
+EnemyShot_UpdateDeactivate:
+    ; Deactivate from normal (non-overflow) path where HL is already restored.
+    ; Deactivate and clear PREV_Y marker
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de
+    xor a
+    ld (hl), a
+    dec hl
+    ld (hl), a
+    dec hl                       ; Restore HL to slot base
+    call EnemyShot_ClearStepCounterForSlot
+    jr EnemyShot_UpdateOK
+
+EnemyShot_UpdateDeactivateFromMove:
+    ; Overflow path still has the slot-base pointer saved on stack.
+    pop hl
     ; Deactivate and clear PREV_Y marker
     ld de, ENEMY_SHOT_ACTIVE
     add hl, de

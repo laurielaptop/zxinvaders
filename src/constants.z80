@@ -87,7 +87,7 @@ SHOT_OBJ_SIZE: equ 4
 
 ; Enemy shots
 MAX_ENEMY_SHOTS: equ 3
-ENEMY_SHOT_SPEED: equ 3    ; Pixels per frame (compensates for phase-gated family updates)
+ENEMY_SHOT_SPEED: equ 3      ; Pixels per frame (now per-frame updates, not phase-gated)
 ENEMY_SHOT_WIDTH: equ 3
 ENEMY_SHOT_HEIGHT: equ 8
 ENEMY_SHOT_LIST_BASE: equ GAME_RAM_BASE + 210

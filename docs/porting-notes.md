@@ -16,11 +16,14 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - **Task 1 (lives + game-over/restart) is complete**: HUD lives digit renders correctly, lives decrement on hit, game-over mode triggers at zero lives, screen clears and "GAME OVER" banner is shown, and restart is available via fire key or auto-timeout (180 frames).
 - **Task 2 (wave-clear detection) is complete**: when all 55 aliens are killed, the screen clears and a full new wave spawns with shields regenerated and the formation starting 8 pixels lower each wave (cycling over 8 waves). Lives and score carry over. See `docs/wave-clear-logic.md`.
 - **Task 3 (enemy-shot families, Slices 1–8) is functionally complete**: enemy fire now runs as three dedicated families (rolling/plunger/squiggly) with round-robin scheduling, score-based reload gating, plunger one-alien-left suppression, rolling player-column targeting, squiggly independent table wrap, family-specific 4-frame row-mask animation, and interleaved family motion in the current renderer. Alien scoring updates the full 16-bit score total. Two implementation regressions (TryFire stack corruption and Update loop stack leak) were fixed; gameplay is stable.
+- **Enemy-shot lifetime parity fix (2026-03-16)**: shot update now retires alien shots when they leave the visible playfield and also on 8-bit Y overflow, matching the original flow where out-of-field shots transition into blowup/end-state instead of persisting indefinitely (`resources/source.z80` around `05C1..0612`). This addresses the observed symptom where only ~2 shots remained visible and family slots appeared to recycle early.
+- **Enemy-shot movement cadence parity adjustment (2026-03-16)**: active enemy shots now advance every frame (instead of one family per frame phase), while family scheduling remains in fire selection. `ENEMY_SHOT_SPEED` was reduced to 1 to keep descent speed controlled with per-frame movement. This aligns better with the original object runtime where active shots continue progressing rather than waiting on family phase turns.
 - **Gameplay pacing has been tuned up slightly** for iteration: shorter main-loop wait (`Timing_WaitShort`) and faster player shot speed (`SHOT_SPEED=5`).
 - **Gameplay pacing has been tuned up again** for broader responsiveness: `Timing_WaitShort` loop reduced to 2800, alien march delay reduced to 7, player shot speed increased to 6, enemy shot speed increased to 3, and enemy family fire delay reduced to 18.
 - **Player sprite corruption root cause identified**: `Player_Draw` was clobbering the sprite-table pointer by reusing `DE` for both pointer state and row bytes, producing random dot/line output regardless of table choice. The draw path now keeps the pointer separate.
 - **Player sprite parity is now complete**: the final player sprite is locked to the ROM-derived `PlayerSprite` data from `resources/source.z80:1C60`, using the `rot90cw` transform for the current ZX renderer.
 - **Shield intact-art parity is now locked**: shields draw from ROM-derived `ShieldImage` data (`resources/source.z80:1D20`) adapted to the current 24x16 ZX renderer and validated in emulator. Damage/degradation logic is still simplified.
+- **Temporary shot-debug mode (2026-03-16)**: shield init/erase/draw calls are currently disabled in `src/main.z80` so enemy-shot travel and player-collision behavior can be validated without shield interference. Re-enable these calls before resuming shield degradation/parity work.
 - **Saucer visual parity is now substantially improved**: saucer and explosion art are ROM-derived, movement is now 1-pixel smooth via shifted drawing, and a temporary `H` dev trigger exists to exercise the hit path during this development cycle.
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 - **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
@@ -92,7 +95,14 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - Wave progression is implemented, but still needs parity tuning against original pacing and transition timing.
 - Saucer bring-up diagnostics have been removed from the main loop after render/timing validation.
 
-### Known Issues
+### Resolved Issues
+- **Enemy-shot traversal — FIXED and VERIFIED (2026-03-16 ~17:45).**
+   - **Root cause**: Rendering boundary `Y >= 192` did NOT match retirement boundary `Y >= 200`. Shots disappeared from screen but remained alive in memory, creating the false impression they "stopped" mid-flight.
+   - **Fix applied**:
+     1. Changed retirement boundary: `cp 192 + ENEMY_SHOT_HEIGHT` → `cp 192` (align with rendering)
+     2. Restored movement speed: `ENEMY_SHOT_SPEED` 1 → 3 (per-frame ungated, so 3px/frame actual)
+   - **Verification (2026-03-16)**: Now see all 3 alien shot types (Rolling, Plunger, Squiggly) reaching the player area consistently. Player collision detection works as expected. Shields re-enabled successfully.
+   - **Impact**: This was blocking all downstream work on shield collision/degradation. Now unblocked for implementation.
 - **Intermittent random colored attribute squares still appear on screen in gameplay.**
    - Symptom: occasional non-gameplay color blocks appear in the bitmap/attribute area.
    - Current understanding: this indicates unintended writes into attribute memory (`0x5800-0x5AFF`).

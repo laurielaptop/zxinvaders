@@ -60,7 +60,7 @@ MAIN_LOOP_PLAYING:
     call PlayerHit_Erase
     call Saucer_Erase           ; Erase saucer
     call EnemyShot_Erase        ; Erase enemy shots after saucer cleanup
-    call Shields_Erase          ; Erase shields before update
+    call Shields_Erase
     
     ; Update game state
     call Player_Update
@@ -96,7 +96,7 @@ MAIN_LOOP_PLAYING:
     call PlayerHit_Draw     ; Draw player blowup animation if active
     call Shot_Draw
     call Saucer_Draw               ; Draw saucer
-    call Shields_Draw           ; Draw shields
+    call Shields_Draw
     call EnemyShot_Draw
     call HUD_Draw
     jp MAIN_LOOP_EARLY_EXIT
