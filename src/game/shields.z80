@@ -175,7 +175,8 @@ Shields_CheckCollision:
     ld a, SHIELD_BASE_Y
     add a, SHIELD_HEIGHT    ; A = shield_bottom
     cp c
-    jr c, .no_hit           ; If shield_bottom <= shot_top, no overlap
+    jr c, .no_hit           ; If shield_bottom < shot_top, no overlap
+    jr z, .no_hit           ; If shield_bottom == shot_top, no overlap
     
     ld a, c
     add a, 8                ; A = shot_bottom
@@ -184,28 +185,23 @@ Shields_CheckCollision:
     jr z, .no_hit
     
     ; Y overlap confirmed. Now check each of 4 shields for X overlap.
-    xor a                   ; A = 0 (shield index counter)
+    xor a                   ; A = 0 (shield index)
     
 .check_shield_loop:
     cp SHIELD_COUNT
     jr nc, .no_hit
     
     push af                 ; Save shield index
-    
-    ; Calculate shield X position: SHIELD_BASE_X + (index * SHIELD_SPACING)
+
+    ; Calculate shield X position and mirror draw alignment.
+    ; Draw path is byte-aligned via X>>3, so collision must use that same
+    ; aligned left edge to avoid left-edge pass-through.
     ld b, a                 ; B = shield index
-    
-    ; Multiply B by SHIELD_SPACING
-    ld c, SHIELD_SPACING    ; C = multiplier
-    xor a                   ; A = 0 (accumulator)
-    or b
-    jr z, .shield_x_ready
-.do_mult:
-    add c
-    djnz .do_mult
-    
-.shield_x_ready:
-    add SHIELD_BASE_X       ; A = shield X position
+    ld a, b
+    ld b, SHIELD_SPACING
+    call Mult_A_By_B
+    add SHIELD_BASE_X
+    and 0xF8                ; align to byte boundary used by draw
     ld b, a                 ; B = shield X
     
     ; X overlap check: shot [E, E+D) and shield [B, B+SHIELD_WIDTH)

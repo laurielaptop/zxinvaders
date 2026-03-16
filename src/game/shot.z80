@@ -186,6 +186,25 @@ Shot_DrawLoop:
     ld b, a                 ; B = X (save for address + mask)
     inc hl
     ld c, (hl)              ; C = Y
+
+    ; Arcade behavior: shields block player shots.
+    ; If the shot overlaps any shield, consume the shot and skip draw.
+    ld a, SHOT_WIDTH
+    call Shields_CheckCollision
+    cp 0xFF
+    jr z, .no_shield_block
+
+    ; Shield hit: update shield state and deactivate this shot.
+    call Shields_OnCollision
+    pop hl
+    push hl
+    ld de, SHOT_ACTIVE
+    add hl, de
+    xor a
+    ld (hl), a
+    jr Shot_DrawNext
+
+.no_shield_block:
     
     ; Build bit mask for this X bit
     ld a, b
@@ -223,23 +242,6 @@ Shot_DrawNextPixel:
     call Shot_NextScanline  ; Move to next scan line in ZX bitmap layout
     djnz Shot_DrawPixelLoop
 Shot_DrawDone:
-
-    ; Check collision with shields before recording PREV_Y
-    pop hl
-    push hl
-    ld a, (hl)              ; A = shot X
-    ld b, a                 ; B = shot X
-    inc hl
-    ld c, (hl)              ; C = shot Y
-    ld a, SHOT_WIDTH        ; A = shot width (1 pixel)
-    call Shields_CheckCollision
-    cp 0xFF                 ; Check if collision detected
-    jr z, .no_shield_collision
-    
-    ; Shield collision detected
-    call Shields_OnCollision  ; A already has shield_index
-    
-.no_shield_collision:
     ; Record last rendered Y for next frame erase
     pop hl
     push hl

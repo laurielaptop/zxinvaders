@@ -96,6 +96,14 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 - Saucer bring-up diagnostics have been removed from the main loop after render/timing validation.
 
 ### Resolved Issues
+- **Shield shot-blocking gap — FIXED and VERIFIED (2026-03-16).**
+   - Symptom: some shots passed through shields, especially near the far-left edge.
+   - Cause: collision bounds did not fully match the renderer's byte-aligned shield X positioning.
+   - Fixes:
+      1. Move shield collision checks to pre-draw shot paths so both player/enemy shots are consumed on contact.
+      2. Align shield collision X bounds to the same byte boundary used by shield drawing.
+   - Result: shields now block shots from both directions across full width, including the left edge.
+
 - **Enemy-shot traversal — FIXED and VERIFIED (2026-03-16 ~17:45).**
    - **Root cause**: Rendering boundary `Y >= 192` did NOT match retirement boundary `Y >= 200`. Shots disappeared from screen but remained alive in memory, creating the false impression they "stopped" mid-flight.
    - **Fix applied**:

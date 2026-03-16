@@ -787,6 +787,29 @@ EnemyShot_DrawLoop:
     inc hl
     ld c, (hl)                   ; C = Y
 
+    ; Arcade behavior: shields block enemy shots.
+    ; If this slot overlaps shields, consume shot and skip draw.
+    ld a, ENEMY_SHOT_WIDTH
+    call Shields_CheckCollision
+    cp 0xFF
+    jr z, .no_enemy_shield_block
+
+    ; Shield hit: update shield state, deactivate slot, clear step counter.
+    call Shields_OnCollision
+    push ix
+    pop hl
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de
+    xor a
+    ld (hl), a
+    push ix
+    pop hl
+    call EnemyShot_ClearStepCounterForSlot
+    pop ix
+    jr EnemyShot_DrawNext
+
+.no_enemy_shield_block:
+
     ; Pick the current 8-row sprite frame for this slot's family.
     push ix
     pop hl                       ; HL = shot structure base
@@ -812,23 +835,6 @@ EnemyShot_DrawPixelLoop:
     dec d
     jr nz, EnemyShot_DrawPixelLoop
 EnemyShot_DrawDone:
-    
-    ; Check collision with shields
-    push ix
-    pop hl                       ; HL = shot structure base
-    ld a, (hl)                   ; A = shot X
-    ld b, a                      ; B = shot X
-    inc hl
-    ld c, (hl)                   ; C = shot Y
-    ld a, ENEMY_SHOT_WIDTH       ; A = shot width (3 pixels)
-    call Shields_CheckCollision
-    cp 0xFF                      ; Check if collision detected
-    jr z, .no_enemy_shield_collision
-    
-    ; Shield collision detected
-    call Shields_OnCollision     ; A already has shield_index
-    
-.no_enemy_shield_collision:
     ; Update PREV_Y using saved structure pointer
     push ix
     pop hl                       ; HL = shot structure base

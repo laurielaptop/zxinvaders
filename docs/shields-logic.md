@@ -101,7 +101,9 @@ Screen shields:   0x2806 (and +0x02E0 for each of 4 shields)
 - Intact shield artwork now uses ROM-derived `ShieldImage` bytes from `resources/source.z80:1D20`.
 - Current in-game intact shield geometry: 24x16 pixels (3 bytes/row), matching the validated emulator silhouette.
 - Orientation is locked in `ShieldImageZX` and should not be reworked unless new visual evidence appears.
-- Remaining gap: damage/collision degradation is still simplified and does not yet erode the shield shape.
+- Player and enemy shots are blocked by shields (pre-draw collision gate).
+- Collision bounds are aligned to the same byte boundary used by shield rendering to avoid left-edge pass-through.
+- Damage/degradation is still simplified and does not yet match full arcade erosion parity.
 
 ### Collision & Degradation Algorithm (Authentic Arcade Behavior)
 
@@ -154,6 +156,8 @@ LD (HL), A                      ; Store degraded bitmap
 ```z80
 ; Shields
 SHIELD_COUNT: equ 4
+SHIELD_ROWS: equ 16
+SHIELD_COLS: equ 3
 SHIELD_HEIGHT: equ 16      ; Intact shield silhouette height on ZX
 SHIELD_WIDTH: equ 24       ; Intact shield silhouette width on ZX
 SHIELD_BASE_Y: equ 144     ; Y position (above player, below aliens)
@@ -161,7 +165,7 @@ SHIELD_BASE_X: equ 28      ; Start X position (center alignment after widening)
 
 ; Shield collision/animation state: one byte per shield
 ; Tracks collision detection state; degradation is automatic via screen bitmap ORing
-SHIELD_STATE: equ GAME_RAM_BASE + 240    ; 4 bytes (collision flags or animation counter)
+SHIELD_STATE: equ GAME_RAM_BASE + 165    ; 4 bytes (collision flags or animation counter)
 ```
 
 **Note on SHIELD_STATE usage:**
@@ -178,27 +182,27 @@ The actual visual degradation is **automatic**: shots rendering over shield pixe
 - `Shields_Init`: Initialize 4 shields to full state (restore intact bitmap from ROM artwork to screen)
 - `Shields_Draw`: Draw all 4 shields on each frame (always draws current bitmap, which may have been eroded by shots)
 - `Shields_Erase`: Erase shields before redraw (clears the 4 shield rectangles)
-- `Shields_OnCollision`: Called when shot collision detected; can increment counter, trigger sound, etc.
-- `Shields_CheckCollision`: Test if projectile collides with shields using pixel-perfect AND (INPUT: B=X, C=Y shot position; OUTPUT: A=shield_index or 0xFF if no hit)
+- `Shields_OnCollision`: Called when shot collision is detected (currently increments per-shield state counter)
+- `Shields_CheckCollision`: AABB collision test with byte-aligned shield X bounds (INPUT: B=X, C=Y, A=width; OUTPUT: A=shield_index or 0xFF if no hit)
 - `Shields_Reset`: Restore all shields to full state (level/game reset, restores intact bitmap from ROM)
 
 ## Integration Points
 
-1. **Player shot draw path** (`src/game/player_shot.z80`):
-   - After rendering shot to screen, test shield collision via `Shields_CheckCollision`
-   - If collision detected (A ≠ 0xFF): call `Shields_OnCollision` with shield_index
-   - **Critical**: Shot rendering naturally erodes the shield via OR operations; `Shields_CheckCollision` detects collision, not rendering
+1. **Player shot draw path** (`src/game/shot.z80`):
+   - Test shield collision before rendering shot
+   - If collision detected (A ≠ 0xFF): call `Shields_OnCollision`, deactivate shot, skip draw
+   - Result: player shots are blocked by shields from below
 
 2. **Enemy shot draw path** (`src/game/enemy_shot.z80`):
-   - Similar integration: test `Shields_CheckCollision` after rendering
-   - If hit: call `Shields_OnCollision` with shield_index
-   - Enemy shots also naturally erode shields during render
+   - Test shield collision before rendering shot
+   - If hit: call `Shields_OnCollision`, deactivate slot, clear family step counter, skip draw
+   - Result: enemy shots are blocked by shields from above
 
-3. **Shields_CheckCollision implementation** (required):
-   - Input: B = X coordinate, C = Y coordinate (shot position)
-   - For each of 4 shields, calculate screen address and test AND with shot sprite pattern
+3. **Shields_CheckCollision implementation**:
+   - Input: B = X coordinate, C = Y coordinate, A = projectile width
+   - Uses AABB overlap checks against per-shield bounds
+   - Shield X bounds are byte-aligned to mirror renderer behavior (`Video_CalcAddress` uses `X >> 3`)
    - Return A = shield_index (0–3) if collision found, or 0xFF if no collision
-   - **Pixel-perfect collision**: Shield bitmap AND shot bitmap must be non-zero
 
 4. **Game init** (`src/main.z80`):
    - Call `Shields_Init` at wave/game start (restores intact artwork from ROM to screen)
