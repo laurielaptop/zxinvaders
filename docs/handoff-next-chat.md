@@ -20,6 +20,11 @@ Player sprite parity is now complete. This handoff captures the verified end sta
 2. Replace remaining placeholder shot graphics with source-derived monochrome sprite tables and complete shield degradation parity.
 3. Tighten enemy-shot parity from functional to visual/timing polish (source-matched shot art, ISR-timed precision later).
 
+## Current known regressions at wrap-up
+- Shield hits from both player and alien shots currently show explosion visuals but do not damage the shield bitmap.
+- Alien-shot shield explosions can freeze just above the shield line.
+- Enemy-shot behavior below the shields still needs a source-trace/debug pass before more parity work.
+
 ## Important technical facts confirmed
 1. `make run-zesarux` rebuilds/package-runs the latest TAP correctly.
 2. `Player_NextScanline` / `PlayerHit_NextScanline` fixes are required to avoid attribute RAM spill during tall sprite stepping.
@@ -28,7 +33,7 @@ Player sprite parity is now complete. This handoff captures the verified end sta
 5. Saucer visuals now use ROM-derived ship/explosion art with shifted 1-pixel movement; temporary `H` key hit simulation exists for development-only testing.
 
 ## Recommended next chat focus
-Continue with source-derived shot graphics and shield degradation work, while keeping an eye out for any recurrence of attribute-memory corruption during testing.
+Start from the documented shield-impact regressions, trace the original 8080 shot blow-up/shield logic, and then fix shield degradation plus the frozen alien-shot explosion path while keeping an eye out for any recurrence of attribute-memory corruption during testing.
 
 ## Suggested first prompt for the new chat
 "Use `docs/handoff-next-chat.md` as the starting context. Player sprite parity, shield intact art, and saucer visuals are now locked; continue with source-derived shot graphics and shield degradation while monitoring for any attribute-memory corruption recurrence." 

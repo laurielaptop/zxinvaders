@@ -14,14 +14,38 @@ This note captures missing gameplay elements that must be documented from `resou
 
 - Shields: PARTIAL (4 shields with correct spacing and ROM-derived intact bitmap; damage/degradation behavior remains simplified)
 - Saucer/UFO: COMPLETE (ROM-derived saucer/explosion art, shifted smooth movement, score table 50/100/150/300, hit detection, explosion sequence)
-- Alien shot families: FUNCTIONALLY COMPLETE (rolling/plunger/squiggly scheduling, reload gating, targeting rules, and interleaved motion are implemented; sprite art parity still remains)
+- Alien shot families: COMPLETE (rolling/plunger/squiggly scheduling, reload gating, targeting rules, interleaved motion, and source-derived family sprite animation are implemented)
 - Alien row graphics/animation: COMPLETE (row type A/B/C mapping and 2-frame animation from ROM-derived tables)
 - Player sprite parity: COMPLETE (ROM-derived player sprite locked; renderer pointer-corruption bug fixed)
 - Graphics/source analysis: complete for sprite assets and animation/render pipeline (`docs/graphics-animation-parity.md`)
-- Explosions: partial
+- Explosions: mostly complete
   - Player explosion: implemented and arcade-style timed.
   - Alien explosion: implemented and positioned from hit slot coordinates.
-  - Shot/saucer side effects: still simplified vs original.
+  - Player-shot explosion: implemented using source-derived `ShotExploding` bytes.
+  - Alien-shot explosion: implemented using source-derived `AShotExplo` bytes.
+  - Remaining: any saucer-side parity details still simplified vs original.
+
+## Bug Fixes Applied (March 2026)
+
+Three gameplay-breaking bugs were found and fixed:
+
+1. **`alien_hit.z80`: double-GAME_RAM_BASE addressing** — `ALIEN_EXPLODING` and related
+  explosion constants are already defined as full RAM addresses (`GAME_RAM_BASE + offset`).
+  Code was incorrectly adding `GAME_RAM_BASE` a second time, sending reads/writes ~10 KB
+  into code space (~0xBABA). `AlienHit_OnHit` therefore always returned NZ (ignored), so
+  no alien was ever killed by a player shot. Fixed by removing the redundant `GAME_RAM_BASE +`
+  prefix from all accesses in `alien_hit.z80`.
+
+2. **`enemy_shot.z80`: alien shots frozen above shields** — when a shield collision was
+  detected during `EnemyShot_Draw`, the slot was switched to ACTIVE=2 (explosion) but draw
+  was skipped. The following frame's Erase pass XOR-drew the explosion at PREV_Y (which
+  nothing had been drawn at), leaving a permanent artifact just above the shield line.
+  Fixed by removing the `pop ix / jr EnemyShot_DrawNext` bail-out so code falls through to
+  the explosion draw path immediately (same frame), making Erase correctly undo it next frame.
+
+3. **`shot.z80`: player shot left frozen artifact at shield** — same structural bug as (2):
+  shield collision in `Shot_Draw` set ACTIVE=2 and jumped to `Shot_DrawNext` without drawing.
+  Fixed by jumping to `Shot_DrawExplosion` instead, drawing the explosion in the same frame.
 
 ## Original 8080 References
 
@@ -83,6 +107,8 @@ Note: original logic initializes **4 shields** (`LD C,$04` at `resources/source.
 
 ## Known Issues (Current)
 
+- Shield-impact damage is currently missing for both player and alien shots: impacts trigger the shot explosion visuals, but the shield bitmap/degradation state is not being consumed yet.
+- Alien-shot shield impacts can leave the explosion visually frozen just above the shield line instead of resolving cleanly on the next frame.
 - Enemy-shot lower-field traversal is inconsistent: some shots pass shield gaps and can kill the player, while many stop progressing visually/functionally before the player area.
 - Enemy-shot family behavior appears stateful across player deaths: initial waves show rolling+squiggly, then some lives switch to mostly/only plunger, and later deaths can switch back.
 - Enemy-shot sprite cleanup has regressions: residual shot pixels/trails can remain on screen after movement.

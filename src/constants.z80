@@ -82,7 +82,7 @@ SHOT_LIST_BASE: equ GAME_RAM_BASE + 200
 SHOT_X: equ 0              ; X position (pixel)
 SHOT_Y: equ 1              ; Y position (pixel)
 SHOT_PREV_Y: equ 2         ; Previous Y for erase
-SHOT_ACTIVE: equ 3         ; 0=inactive, 1=active
+SHOT_ACTIVE: equ 3         ; 0=inactive, 1=active, 2=exploding (one frame)
 SHOT_OBJ_SIZE: equ 4
 
 ; Enemy shots
@@ -100,7 +100,7 @@ ENEMY_SHOT_FAMILY_SQUIGGLY: equ 2
 ENEMY_SHOT_X: equ 0
 ENEMY_SHOT_Y: equ 1
 ENEMY_SHOT_PREV_Y: equ 2
-ENEMY_SHOT_ACTIVE: equ 3
+ENEMY_SHOT_ACTIVE: equ 3    ; 0=inactive, 1=active, 2=exploding (one frame)
 ENEMY_SHOT_OBJ_SIZE: equ 4
 
 ; Enemy shot timing

@@ -257,7 +257,7 @@ For tracking shot (rolling):
 
 ### Implementation Details
 
-Our Spectrum port uses a **simplified single-shot-type system** with the core column-firing logic from the original:
+Our Spectrum port uses a **three-family shot system** (rolling/plunger/squiggly) with source-driven scheduling and selection rules:
 
 1. **Column-firing table** (like plunger/squiggly shots)
    - 16-entry table cycling through columns 1-11
@@ -601,3 +601,9 @@ The arcade uses a sophisticated multi-shot system with:
 - Animated sprites with 4-frame cycles
 
 Our simplified implementation captures the core mechanics while being easier to implement and debug on the Spectrum.
+
+## Known Issues (Wrap-up, 2026-03-16)
+
+- Shield impacts currently trigger explosion visuals for both player and alien shots, but do not yet consume shield pixels or advance shield degradation.
+- Alien-shot shield explosions can remain frozen one row above the shield line, indicating a render/erase ordering bug in the shield-impact path.
+- Enemy-shot behavior below the shield line still needs another source-first validation pass before the next gameplay parity session.

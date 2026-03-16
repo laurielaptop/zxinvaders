@@ -519,6 +519,8 @@ EnemyShot_UpdateLoop:
     pop hl
     or a
     jr z, EnemyShot_UpdateNext   ; Inactive
+    cp 2
+    jr z, EnemyShot_UpdateFinishExplosion
 
     ; Move active shots every frame.
     ; Family selection is handled in TryFire; movement should not be phase-gated.
@@ -571,6 +573,17 @@ EnemyShot_UpdateDeactivateFromMove:
     ld (hl), a
     dec hl                       ; Restore HL to slot base
     call EnemyShot_ClearStepCounterForSlot
+
+EnemyShot_UpdateFinishExplosion:
+    ; Explosion is rendered/erased for one frame, then slot returns inactive.
+    push hl
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de
+    xor a
+    ld (hl), a
+    dec hl
+    ld (hl), a
+    pop hl
     
 EnemyShot_UpdateOK:
 EnemyShot_UpdateNext:
@@ -662,14 +675,9 @@ EnemyShot_CheckLoop:
     cp 0xFF
     jr nz, EnemyShot_AlreadyExploding  ; Skip if already hit
     
-    ; Deactivate shot and clear PREV_Y marker
+    ; Convert shot to one-frame explosion and clear family step spacing.
     push hl
-    ld de, ENEMY_SHOT_ACTIVE
-    add hl, de
-    xor a
-    ld (hl), a
-    dec hl
-    ld (hl), a
+    call EnemyShot_SetSlotExploding
     pop hl
     push hl
     call EnemyShot_ClearStepCounterForSlot
@@ -680,14 +688,9 @@ EnemyShot_CheckLoop:
     jr EnemyShot_CheckNext
     
 EnemyShot_AlreadyExploding:
-    ; Just deactivate the shot without retriggering explosion
+    ; Player already exploding: still show shot blowup briefly.
     push hl
-    ld de, ENEMY_SHOT_ACTIVE
-    add hl, de
-    xor a
-    ld (hl), a
-    dec hl
-    ld (hl), a
+    call EnemyShot_SetSlotExploding
     pop hl
     push hl
     call EnemyShot_ClearStepCounterForSlot
@@ -731,7 +734,7 @@ EnemyShot_EraseLoop:
 
     ; Erase the previous sprite footprint with per-row clipping.
     push hl
-    call EnemyShot_GetSpriteFramePtrForSlot
+    call EnemyShot_GetRenderFramePtrForSlot
     ld d, ENEMY_SHOT_HEIGHT
 
     ld a, b
@@ -787,6 +790,11 @@ EnemyShot_DrawLoop:
     inc hl
     ld c, (hl)                   ; C = Y
 
+    ; Explosion slots are non-colliding render-only states.
+    ld a, (ix + ENEMY_SHOT_ACTIVE)
+    cp 2
+    jr z, .no_enemy_shield_block
+
     ; Arcade behavior: shields block enemy shots.
     ; If this slot overlaps shields, consume shot and skip draw.
     ld a, ENEMY_SHOT_WIDTH
@@ -794,26 +802,22 @@ EnemyShot_DrawLoop:
     cp 0xFF
     jr z, .no_enemy_shield_block
 
-    ; Shield hit: update shield state, deactivate slot, clear step counter.
+    ; Shield hit: update shield state, switch slot to explosion, clear step counter.
     call Shields_OnCollision
     push ix
     pop hl
-    ld de, ENEMY_SHOT_ACTIVE
-    add hl, de
-    xor a
-    ld (hl), a
+    call EnemyShot_SetSlotExploding
     push ix
     pop hl
     call EnemyShot_ClearStepCounterForSlot
-    pop ix
-    jr EnemyShot_DrawNext
+    ; Fall through: draw explosion immediately so Erase can cleanly XOR it off next frame.
 
 .no_enemy_shield_block:
 
     ; Pick the current 8-row sprite frame for this slot's family.
     push ix
     pop hl                       ; HL = shot structure base
-    call EnemyShot_GetSpriteFramePtrForSlot
+    call EnemyShot_GetRenderFramePtrForSlot
 
     ; Cache sub-byte X offset for the sprite renderer.
     ld a, b
@@ -910,6 +914,40 @@ EnemyShot_EraseSpriteRow:
     ; XOR blit is symmetric: erase uses the same operation as draw.
     jp EnemyShot_DrawSpriteRow
 
+EnemyShot_SetSlotExploding:
+    ; Input: HL = enemy-shot slot base
+    ; Set PREV_Y = Y and ACTIVE = 2 (one-frame explosion state).
+    push hl
+    inc hl                       ; Y
+    ld a, (hl)
+    inc hl                       ; PREV_Y
+    ld (hl), a
+    inc hl                       ; ACTIVE
+    ld (hl), 2
+    pop hl
+    ret
+
+EnemyShot_GetRenderFramePtrForSlot:
+    ; Input: HL = enemy-shot slot base
+    ; Output: HL = 8-byte sprite frame for normal or explosion state.
+    push de
+    push bc
+    push hl
+    ld de, ENEMY_SHOT_ACTIVE
+    add hl, de
+    ld a, (hl)
+    pop hl
+    cp 2
+    jr z, .explosion
+    call EnemyShot_GetSpriteFramePtrForSlot
+    jr .done
+.explosion:
+    ld hl, EnemyShot_SpriteRowsExplosion
+.done:
+    pop bc
+    pop de
+    ret
+
 EnemyShot_GetSpriteFramePtrForSlot:
     ; Input: HL = enemy-shot slot base
     ; Output: HL = 8-byte sprite frame for current family/animation step
@@ -963,6 +1001,11 @@ EnemyShot_SpriteRowsSquiggly:
     defb 0x00, 0x20, 0x40, 0x80, 0x40, 0x20, 0x40, 0x80  ; f1
     defb 0x00, 0x40, 0x20, 0x40, 0x80, 0x40, 0x20, 0x40  ; f2
     defb 0x00, 0x80, 0x40, 0x20, 0x40, 0x80, 0x40, 0x20  ; f3
+
+; Source-derived alien-shot explosion (`AShotExplo` at resources/source.z80:1CDC).
+; Original is 6 rows; padded to 8 for the ZX row loop.
+EnemyShot_SpriteRowsExplosion:
+    defb 0x00, 0x4A, 0x15, 0xBE, 0x3F, 0x5E, 0x25, 0x00
 
 ; ===== Column-Firing Table =====
 ; Plunger column-firing table — indices 00-0F of original ColFireTable ($1D00).

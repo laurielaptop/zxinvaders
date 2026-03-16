@@ -245,11 +245,12 @@ Reference:
 - `src/game/shields.z80:49`
 
 ### 3.5 Shots
-- Current player and enemy shots are simple vertical line bits.
+- Current:
+  - Enemy shots are source-derived, family-specific animated sprites (rolling/plunger/squiggly), rendered as 3x8 monochrome masks with per-family 4-frame cycling.
+  - Player shot now uses source-derived `PlayerShotSpr` row pattern from `resources/source.z80:1C90`.
+  - Player-shot explosion now uses source-derived `ShotExploding` bytes from `resources/source.z80:1C91`.
+  - Alien-shot explosion now uses source-derived `AShotExplo` bytes from `resources/source.z80:1CDC` (padded to the ZX 8-row shot renderer loop).
 - Needed:
-  - player shot sprite/explosion parity
-  - 3 alien shot families with independent frame tables and frame cycling
-  - family-specific render assets (rolling/plunger/squiggly)
   - continued late-wave validation that shot source selection only uses live visible aliens
 
 References:
@@ -282,9 +283,8 @@ References:
 1. Add `src/game/sprites_arcade.z80` with imported bitmap tables for player, aliens, saucer, shields, and all shot families.
 2. Update player and saucer modules to reference arcade bitmap tables.
 4. Replace shield block fill with pattern-based shield draw and damage masks.
-5. Expand enemy-shot renderer to family-specific animated sprites (rolling/plunger/squiggly).
-6. Replace player-shot line render with sprite-based draw/erase and parity explosion frame.
-7. Re-run collision tuning after sprite-shape changes.
+5. Integrate parity explosion assets for alien-shot blowup paths (`AShotExplo`).
+6. Re-run collision tuning after shot/explosion-shape updates.
 
 ## 6. Open Decisions Before Coding
 

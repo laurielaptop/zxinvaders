@@ -70,6 +70,8 @@ Shot_UpdateLoop:
     ld a, (hl)
     or a
     jr z, Shot_UpdateNext   ; Skip if inactive
+    cp 2
+    jr z, Shot_UpdateFinishExplosion
     
     ; Move shot upward
     pop hl
@@ -83,6 +85,15 @@ Shot_UpdateLoop:
     
     ; Update Y position
     ld (hl), a
+    jr Shot_UpdateNext
+
+Shot_UpdateFinishExplosion:
+    ; Explosion sprites are displayed for one frame, then cleared.
+    pop hl
+    push hl
+    ld bc, SHOT_ACTIVE
+    add hl, bc
+    ld (hl), 0
     jr Shot_UpdateNext
     
 Shot_UpdateDeactivate:
@@ -115,6 +126,8 @@ Shot_EraseLoop:
     ld a, (hl)
     or a
     jr z, Shot_EraseNext    ; Skip if inactive
+    cp 2
+    jr z, Shot_EraseExplosion
     
     ; Get previous position
     pop hl
@@ -148,13 +161,45 @@ Shot_EraseMaskReady:
 Shot_ErasePixelLoop:
     ld a, h
     cp 0x58
-    jr nc, Shot_EraseDone
+    jp nc, Shot_EraseDone
     ld a, (hl)
     and d
     ld (hl), a
     call Shot_NextScanline  ; Move to next scan line in ZX bitmap layout
     djnz Shot_ErasePixelLoop
 Shot_EraseDone:
+    jr Shot_EraseNext
+
+Shot_EraseExplosion:
+    ; Erase previous explosion image with XOR-symmetric blit.
+    pop hl
+    push hl
+    ld a, (hl)              ; A = X
+    ld b, a                 ; B = X
+    inc hl
+    inc hl                  ; Skip Y, point to PREV_Y
+    ld c, (hl)              ; C = PREV_Y
+
+    ld a, b
+    call Video_CalcAddress
+
+    ld a, b
+    and 0x07
+    ld e, a                 ; E = sub-byte X offset
+
+    ld b, 8
+    ld ix, ShotExplosionRows
+Shot_EraseExplosionLoop:
+    ld a, h
+    cp 0x58
+    jr nc, Shot_EraseDone
+    ld a, (ix+0)
+    inc ix
+    push hl
+    call Shot_XorRowShifted
+    pop hl
+    call Shot_NextScanline
+    djnz Shot_EraseExplosionLoop
     
 Shot_EraseNext:
     pop hl
@@ -177,7 +222,9 @@ Shot_DrawLoop:
     add hl, bc
     ld a, (hl)
     or a
-    jr z, Shot_DrawNext     ; Skip if inactive
+    jp z, Shot_DrawNext     ; Skip if inactive
+    cp 2
+    jp z, Shot_DrawExplosion
     
     ; Get current position
     pop hl
@@ -200,9 +247,16 @@ Shot_DrawLoop:
     push hl
     ld de, SHOT_ACTIVE
     add hl, de
-    xor a
+    ld (hl), 2              ; Switch into one-frame explosion state.
+
+    ; Keep PREV_Y aligned so erase can remove the explosion next frame.
+    pop hl
+    push hl
+    inc hl                  ; Point to Y
+    ld a, (hl)
+    inc hl                  ; Point to PREV_Y
     ld (hl), a
-    jr Shot_DrawNext
+    jp Shot_DrawExplosion   ; Draw one-frame explosion then Erase undoes it next frame.
 
 .no_shield_block:
     
@@ -249,13 +303,54 @@ Shot_DrawDone:
     ld a, (hl)
     inc hl                  ; Point to PREV_Y
     ld (hl), a
+    jr Shot_DrawNext
+
+Shot_DrawExplosion:
+    ; Draw source-derived player-shot explosion sprite (8x8), XOR blit.
+    pop hl
+    push hl
+    ld a, (hl)              ; A = X
+    ld b, a                 ; B = X
+    inc hl
+    ld c, (hl)              ; C = Y
+
+    ld a, b
+    call Video_CalcAddress
+
+    ld a, b
+    and 0x07
+    ld e, a                 ; E = sub-byte X offset
+
+    ld b, 8
+    ld ix, ShotExplosionRows
+Shot_DrawExplosionLoop:
+    ld a, h
+    cp 0x58
+    jr nc, Shot_DrawExplosionDone
+    ld a, (ix+0)
+    inc ix
+    push hl
+    call Shot_XorRowShifted
+    pop hl
+    call Shot_NextScanline
+    djnz Shot_DrawExplosionLoop
+
+Shot_DrawExplosionDone:
+    ; Record last rendered Y for erase pass.
+    pop hl
+    push hl
+    inc hl                  ; Point to Y
+    ld a, (hl)
+    inc hl                  ; Point to PREV_Y
+    ld (hl), a
     
 Shot_DrawNext:
     pop hl
     pop bc
     ld de, SHOT_OBJ_SIZE
     add hl, de
-    djnz Shot_DrawLoop
+    dec b
+    jp nz, Shot_DrawLoop
     ret
 
 ; Shot_Reset
@@ -291,5 +386,59 @@ Shot_NextScanline:
     ld h, a
     ret
 
+Shot_XorRowShifted:
+    ; Input: A = row bits, HL = row byte address, E = X sub-byte offset
+    push bc
+    push de
+    ld d, a
+    ld a, e
+    or a
+    jr z, .aligned
+    ld c, a
+
+    ld b, a
+    ld a, d
+.shift_right:
+    srl a
+    djnz .shift_right
+    ld e, a
+
+    ld a, 8
+    sub c
+    ld b, a
+    ld a, d
+.shift_left:
+    sla a
+    djnz .shift_left
+    ld d, a
+
+    ld a, (hl)
+    xor e
+    ld (hl), a
+    ld a, d
+    or a
+    jr z, .done
+    inc l
+    ld a, (hl)
+    xor d
+    ld (hl), a
+    jr .done
+
+.aligned:
+    ld a, (hl)
+    xor d
+    ld (hl), a
+
+.done:
+    pop de
+    pop bc
+    ret
+
 PlayerShotRows:
-    db 0, 0, 0, 0, 1, 1, 1, 1
+    ; Source-derived from PlayerShotSpr (resources/source.z80:1C90 = 0x0F).
+    ; LSB is top pixel in source orientation, so rows 0-3 are lit.
+    db 1, 1, 1, 1, 0, 0, 0, 0
+
+ShotExplosionRows:
+    ; Source-derived from ShotExploding (resources/source.z80:1C91).
+    db 0x99, 0x3C, 0x7E, 0x3D, 0xBC, 0x3E, 0x7C, 0x99

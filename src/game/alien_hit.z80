@@ -3,7 +3,7 @@
 
 AlienHit_Init:
     ; Initialize alien explosion state
-    ld hl, GAME_RAM_BASE + ALIEN_EXPLODING
+    ld hl, ALIEN_EXPLODING
     ld (hl), 0xFF           ; 0xFF = no explosion active
     ret
 
@@ -13,7 +13,7 @@ AlienHit_OnHit:
     ; Returns: Z on success (explosion started), NZ if ignored
     
     ; Check if explosion already in progress
-    ld a, (GAME_RAM_BASE + ALIEN_EXPLODING)
+    ld a, (ALIEN_EXPLODING)
     cp 0xFF
     jr z, AlienHit_OnHitStart
     ld a, 1
@@ -34,20 +34,20 @@ AlienHit_OnHitStart:
     
     ; Save explosion position
     ld a, b
-    ld (GAME_RAM_BASE + ALIEN_EXPLOSION_X), a
+    ld (ALIEN_EXPLOSION_X), a
     ld a, c
-    ld (GAME_RAM_BASE + ALIEN_EXPLOSION_Y), a
+    ld (ALIEN_EXPLOSION_Y), a
     
     ; Initialize explosion state
-    ld hl, GAME_RAM_BASE + ALIEN_EXPLODING
+    ld hl, ALIEN_EXPLODING
     ld (hl), 0              ; Start explosion
     
-    ld hl, GAME_RAM_BASE + ALIEN_EXPLOSION_DELAY
+    ld hl, ALIEN_EXPLOSION_DELAY
     ld (hl), 16             ; 16 frame delay (arcade authentic)
     
     ; Store alien grid index for later marking as dead
     ld a, e
-    ld (GAME_RAM_BASE + ALIEN_EXPLOSION_INDEX), a
+    ld (ALIEN_EXPLOSION_INDEX), a
 
     xor a                   ; Z = success
     ret
@@ -57,17 +57,17 @@ AlienHit_Update:
     ; Returns: nothing
     
     ; Check if explosion active
-    ld a, (GAME_RAM_BASE + ALIEN_EXPLODING)
+    ld a, (ALIEN_EXPLODING)
     cp 0xFF
     ret z                   ; No explosion active
     
     ; Decrement delay timer
-    ld hl, GAME_RAM_BASE + ALIEN_EXPLOSION_DELAY
+    ld hl, ALIEN_EXPLOSION_DELAY
     dec (hl)
     ret nz                  ; Still counting down
     
     ; Timer expired - end explosion
-    ld hl, GAME_RAM_BASE + ALIEN_EXPLODING
+    ld hl, ALIEN_EXPLODING
     ld (hl), 0xFF           ; Mark explosion complete
 
     ret
@@ -77,14 +77,14 @@ AlienHit_Erase:
     ; Returns: nothing
     
     ; Check if explosion active
-    ld a, (GAME_RAM_BASE + ALIEN_EXPLODING)
+    ld a, (ALIEN_EXPLODING)
     cp 0xFF
     ret z                   ; No explosion to erase
     
     ; Get explosion position
-    ld a, (GAME_RAM_BASE + ALIEN_EXPLOSION_X)
+    ld a, (ALIEN_EXPLOSION_X)
     ld b, a
-    ld a, (GAME_RAM_BASE + ALIEN_EXPLOSION_Y)
+    ld a, (ALIEN_EXPLOSION_Y)
     ld c, a
     
     ; Calculate screen address
@@ -107,14 +107,14 @@ AlienHit_Draw:
     ; Returns: nothing
     
     ; Check if explosion active
-    ld a, (GAME_RAM_BASE + ALIEN_EXPLODING)
+    ld a, (ALIEN_EXPLODING)
     cp 0xFF
     ret z                   ; No explosion to draw
     
     ; Get explosion position
-    ld a, (GAME_RAM_BASE + ALIEN_EXPLOSION_X)
+    ld a, (ALIEN_EXPLOSION_X)
     ld b, a
-    ld a, (GAME_RAM_BASE + ALIEN_EXPLOSION_Y)
+    ld a, (ALIEN_EXPLOSION_Y)
     ld c, a
     
     ; Calculate screen address
