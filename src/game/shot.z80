@@ -224,6 +224,22 @@ Shot_DrawNextPixel:
     djnz Shot_DrawPixelLoop
 Shot_DrawDone:
 
+    ; Check collision with shields before recording PREV_Y
+    pop hl
+    push hl
+    ld a, (hl)              ; A = shot X
+    ld b, a                 ; B = shot X
+    inc hl
+    ld c, (hl)              ; C = shot Y
+    ld a, SHOT_WIDTH        ; A = shot width (1 pixel)
+    call Shields_CheckCollision
+    cp 0xFF                 ; Check if collision detected
+    jr z, .no_shield_collision
+    
+    ; Shield collision detected
+    call Shields_OnCollision  ; A already has shield_index
+    
+.no_shield_collision:
     ; Record last rendered Y for next frame erase
     pop hl
     push hl

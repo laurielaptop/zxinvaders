@@ -154,11 +154,91 @@ Shields_Reset:
     jp Shields_Init
 
 ; Shields_CheckCollision
-; Test if a projectile at (B=X, C=Y) collides with any shield
-; Returns A=shield_index if hit, or -1 (0xFF) if no hit
-; TODO: Implement actual collision detection
+; Test if a projectile at (B=X, C=Y) with width in A collides with any shield
+; Input:  B = X coordinate (left edge of projectile)
+;         C = Y coordinate (top edge of projectile)
+;         A = projectile width in pixels
+;         (height is always 8 pixels for both player and enemy shots)
+; Output: A = shield_index (0-3) if collision detected, or 0xFF if no collision
+; Uses simple AABB (axis-aligned bounding box) overlap detection
 Shields_CheckCollision:
-    ld a, 0xFF              ; No hit
+    push bc
+    push de
+    push hl
+    
+    ld d, a                 ; D = projectile width
+    ld e, b                 ; E = shot X (save for X overlap test)
+    
+    ; Y range check: shields span [SHIELD_BASE_Y, SHIELD_BASE_Y + SHIELD_HEIGHT)
+    ; Projectile is 8 pixels tall, so [C, C+8)
+    ; Overlap if: C < shield_bottom AND shield_top < C+8
+    ld a, SHIELD_BASE_Y
+    add a, SHIELD_HEIGHT    ; A = shield_bottom
+    cp c
+    jr c, .no_hit           ; If shield_bottom <= shot_top, no overlap
+    
+    ld a, c
+    add a, 8                ; A = shot_bottom
+    cp SHIELD_BASE_Y        ; If shot_bottom <= shield_top, no overlap
+    jr c, .no_hit
+    jr z, .no_hit
+    
+    ; Y overlap confirmed. Now check each of 4 shields for X overlap.
+    xor a                   ; A = 0 (shield index counter)
+    
+.check_shield_loop:
+    cp SHIELD_COUNT
+    jr nc, .no_hit
+    
+    push af                 ; Save shield index
+    
+    ; Calculate shield X position: SHIELD_BASE_X + (index * SHIELD_SPACING)
+    ld b, a                 ; B = shield index
+    
+    ; Multiply B by SHIELD_SPACING
+    ld c, SHIELD_SPACING    ; C = multiplier
+    xor a                   ; A = 0 (accumulator)
+    or b
+    jr z, .shield_x_ready
+.do_mult:
+    add c
+    djnz .do_mult
+    
+.shield_x_ready:
+    add SHIELD_BASE_X       ; A = shield X position
+    ld b, a                 ; B = shield X
+    
+    ; X overlap check: shot [E, E+D) and shield [B, B+SHIELD_WIDTH)
+    ; Overlap if: E < shield_right AND shield_left < E+D
+    ld a, b
+    add a, SHIELD_WIDTH     ; A = shield_right
+    cp e
+    jr c, .next_shield      ; If shield_right <= shot_left, no overlap
+    jr z, .next_shield
+    
+    ld a, e
+    add a, d                ; A = shot_right
+    cp b
+    jr c, .next_shield      ; If shot_right <= shield_left, no overlap
+    jr z, .next_shield
+    
+    ; Collision detected!
+    pop af                  ; A = shield index
+    pop hl
+    pop de
+    pop bc
+    ret
+    
+.next_shield:
+    pop af
+    inc a
+    jr .check_shield_loop
+    
+.no_hit:
+    ld a, 0xFF              ; No collision
+    pop hl
+    pop de
+    pop bc
     ret
 
 ; Mult_A_By_B

@@ -813,6 +813,22 @@ EnemyShot_DrawPixelLoop:
     jr nz, EnemyShot_DrawPixelLoop
 EnemyShot_DrawDone:
     
+    ; Check collision with shields
+    push ix
+    pop hl                       ; HL = shot structure base
+    ld a, (hl)                   ; A = shot X
+    ld b, a                      ; B = shot X
+    inc hl
+    ld c, (hl)                   ; C = shot Y
+    ld a, ENEMY_SHOT_WIDTH       ; A = shot width (3 pixels)
+    call Shields_CheckCollision
+    cp 0xFF                      ; Check if collision detected
+    jr z, .no_enemy_shield_collision
+    
+    ; Shield collision detected
+    call Shields_OnCollision     ; A already has shield_index
+    
+.no_enemy_shield_collision:
     ; Update PREV_Y using saved structure pointer
     push ix
     pop hl                       ; HL = shot structure base

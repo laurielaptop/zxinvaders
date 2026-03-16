@@ -103,11 +103,43 @@ Screen shields:   0x2806 (and +0x02E0 for each of 4 shields)
 - Orientation is locked in `ShieldImageZX` and should not be reworked unless new visual evidence appears.
 - Remaining gap: damage/collision degradation is still simplified and does not yet erode the shield shape.
 
+### Collision & Degradation Algorithm (Authentic Arcade Behavior)
+
+**From original DrawSprCollision routine (0x1491 in source.z80):**
+
+The arcade uses a **unified collision/rendering algorithm** for all sprites (player shots, enemy shots, shields):
+
+```asm
+; Read sprite pattern byte (shifted)
+LD A, (sprite_pattern)          ; Get byte
+OUT (SHFT_DATA), A              ; Shift register
+IN A, (SHFT_IN)                 ; Read shifted result
+
+; Test collision: sprite AND screen content
+AND (HL)                        ; Collision if any bits overlap
+JP Z, next                      ; No collision? Skip flag
+LD A, 01
+LD (collision), A              ; Flag collision detected
+
+; Always OR sprite onto screen (automatic erosion)
+LD A, (sprite_pattern)
+OR (HL)                         ; Merge bits: sprite OR screen
+LD (HL), A                      ; Store degraded bitmap
+```
+
+**Key insights:**
+- **Shields are not special**: They're ordinary screen bitmap content (0x2806 area)
+- **Collision detection**: Pixel-perfect bitwise AND between sprite pattern and screen content
+- **Degradation**: Automatic via continuous OR operation during sprite rendering
+- **No discrete damage stages**: Arcade uses continuous erosion—bits accumulate as 1s whenever any sprite ORs on top
+- **Same routine for all sprites**: Player shots, enemy shots, and even saucer all use DrawSprCollision
+- **Result**: Natural "bite mark" appearance emerges from persistent OR operations, without needing pre-defined damage variants
+
 ### Constraints
 
 1. **Memory**: ZX bitmap is non-linear; screen row offset is 0x0100 (256), not 0x0020 (32) as in arcade.
 2. **Sprite Format**: Instead of arcade byte-oriented bitmap, use ZX bit-shifted rendering.
-3. **Damage Model**: Arcade uses OR with collision data; ZX will use AND-NOT to degrade shields.
+3. **Damage Integration**: Wire `Shields_CheckCollision` into shot draw paths to test AND collision; erosion then happens naturally when shots render over shields.
 
 ### Implementation Plan
 
@@ -122,42 +154,58 @@ Screen shields:   0x2806 (and +0x02E0 for each of 4 shields)
 ```z80
 ; Shields
 SHIELD_COUNT: equ 4
-SHIELD_ROWS: equ 16
-SHIELD_COLS: equ 3
 SHIELD_HEIGHT: equ 16      ; Intact shield silhouette height on ZX
 SHIELD_WIDTH: equ 24       ; Intact shield silhouette width on ZX
-SHIELD_DAMAGE_STAGES: equ 4 ; 0=intact, 1=1bite, 2=2bites, 3=destroyed
 SHIELD_BASE_Y: equ 144     ; Y position (above player, below aliens)
 SHIELD_BASE_X: equ 28      ; Start X position (center alignment after widening)
 
-; Shield state: one byte per shield (damage level)
-SHIELD_STATE: equ GAME_RAM_BASE + 240    ; 4 bytes
+; Shield collision/animation state: one byte per shield
+; Tracks collision detection state; degradation is automatic via screen bitmap ORing
+SHIELD_STATE: equ GAME_RAM_BASE + 240    ; 4 bytes (collision flags or animation counter)
 ```
+
+**Note on SHIELD_STATE usage:**
+Unlike early designs proposing 4 discrete damage stages (0–3), the arcade uses **continuous bitmap erosion**. The SHIELD_STATE byte per shield can track:
+- Collision event flags (for sound/animation effects)
+- Animation/redraw cycles
+- Hit counter (for gameplay events)
+
+The actual visual degradation is **automatic**: shots rendering over shield pixels naturally degrade them via OR operations on the screen bitmap.
 
 ### ZX Implementation File
 
 `src/game/shields.z80` currently provides:
-- `Shields_Init`: Initialize 4 shields to full state
-- `Shields_Draw`: Draw all 4 shields using ROM-derived intact bitmap data
-- `Shields_Erase`: Erase shields before redraw
-- `Shields_OnCollision`: Increment damage when shot hits shield
-- `Shields_CheckCollision`: Test if projectile collides with shields (still TODO)
-- `Shields_Reset`: Restore all shields to full state (level/game reset)
+- `Shields_Init`: Initialize 4 shields to full state (restore intact bitmap from ROM artwork to screen)
+- `Shields_Draw`: Draw all 4 shields on each frame (always draws current bitmap, which may have been eroded by shots)
+- `Shields_Erase`: Erase shields before redraw (clears the 4 shield rectangles)
+- `Shields_OnCollision`: Called when shot collision detected; can increment counter, trigger sound, etc.
+- `Shields_CheckCollision`: Test if projectile collides with shields using pixel-perfect AND (INPUT: B=X, C=Y shot position; OUTPUT: A=shield_index or 0xFF if no hit)
+- `Shields_Reset`: Restore all shields to full state (level/game reset, restores intact bitmap from ROM)
 
 ## Integration Points
 
-1. **Player shot collision** (`src/game/player_shot.z80`):
-   - After collision check, also test shield collision.
-   - If collision: call `Shields_OnCollision`, increment damage, create visual feedback.
+1. **Player shot draw path** (`src/game/player_shot.z80`):
+   - After rendering shot to screen, test shield collision via `Shields_CheckCollision`
+   - If collision detected (A ≠ 0xFF): call `Shields_OnCollision` with shield_index
+   - **Critical**: Shot rendering naturally erodes the shield via OR operations; `Shields_CheckCollision` detects collision, not rendering
 
-2. **Enemy shot collision** (`src/game/enemy_shot.z80`):
-   - Similar integration: test shield collision, increment damage if hit.
+2. **Enemy shot draw path** (`src/game/enemy_shot.z80`):
+   - Similar integration: test `Shields_CheckCollision` after rendering
+   - If hit: call `Shields_OnCollision` with shield_index
+   - Enemy shots also naturally erode shields during render
 
-3. **Game init** (`src/main.z80`):
-   - Call `Shields_Init` at wave/game start.
+3. **Shields_CheckCollision implementation** (required):
+   - Input: B = X coordinate, C = Y coordinate (shot position)
+   - For each of 4 shields, calculate screen address and test AND with shot sprite pattern
+   - Return A = shield_index (0–3) if collision found, or 0xFF if no collision
+   - **Pixel-perfect collision**: Shield bitmap AND shot bitmap must be non-zero
 
-4. **Draw loop** (`src/main.z80`):
-   - Call `Shields_Erase` and `Shields_Draw` in standard erase-update-draw cadence.
+4. **Game init** (`src/main.z80`):
+   - Call `Shields_Init` at wave/game start (restores intact artwork from ROM to screen)
+
+5. **Draw loop** (`src/main.z80`):
+   - Call `Shields_Erase` and `Shields_Draw` in standard erase-update-draw cadence
+   - Note: Shields are drawn EVERY frame; degradation visible because screen bitmap persists from shot ORing
 
 ---
 
