@@ -241,7 +241,8 @@ Reference:
 ### 3.4 Shields
 - Current: intact shield art now uses ROM-derived `ShieldImage` source bytes from `resources/source.z80:1D20`, adapted to a 24x16 ZX silhouette for the current renderer.
 - Locked orientation: `rot90cw+vflip` source transform, centered in 24px, with final in-game row-orientation adjustment validated against emulator screenshots.
-- Remaining gap: shield damage/degradation is still simplified and does not yet follow arcade erosion behavior.
+- Shield-impact update: erosion now uses projectile-footprint buffer mutation for player and enemy shots.
+- Remaining gap: repeated shield hits still show horizontal striping/corruption, so degradation parity and visual correctness are not yet complete.
 
 Reference:
 - `src/game/shields.z80:49`

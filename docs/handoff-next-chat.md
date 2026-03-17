@@ -19,23 +19,22 @@ Primary task tracker for follow-up work: `docs/remaining-checklist.md`.
 
 ## Highest-value remaining work
 1. Continue monitoring the historical attribute-memory corruption issue; it was not reproduced during the latest player-parity and shield-art session.
-2. Complete shield degradation parity and fix shield-impact regressions (including frozen alien-shot shield explosions).
+2. Complete shield degradation parity by fixing the remaining shield-buffer corruption in projectile-footprint erosion (current symptom: horizontal banding/striping after repeated hits).
 3. Tighten enemy-shot parity from functional to visual/timing polish (cadence/cleanup/source-trace validation).
 
 ## Current known regressions at wrap-up
-- Shield hits from both player and alien shots currently show explosion visuals but do not damage the shield bitmap.
-- Alien-shot shield explosions can freeze just above the shield line.
+- Shield hits now mutate the shield buffer, but visual erosion is still incorrect: repeated impacts generate horizontal-line corruption instead of localized bite marks.
 - Enemy-shot behavior below the shields still needs a source-trace/debug pass before more parity work.
 
 ## Important technical facts confirmed
 1. `make run-zesarux` rebuilds/package-runs the latest TAP correctly.
 2. `Player_NextScanline` / `PlayerHit_NextScanline` fixes are required to avoid attribute RAM spill during tall sprite stepping.
 3. Player parity is solved; do not reopen table-orientation experiments unless new evidence appears.
-4. Shields now use source-derived intact art; remaining shield work is degradation/collision parity.
+4. Shields now use source-derived intact art and footprint-based hit wiring; remaining shield work is fixing corruption in the erosion path.
 5. Saucer visuals now use ROM-derived ship/explosion art with shifted 1-pixel movement; temporary `H` key hit simulation exists for development-only testing.
 
 ## Recommended next chat focus
-Start from the documented shield-impact regressions, trace the original 8080 shot blow-up/shield logic, and then fix shield degradation plus the frozen alien-shot explosion path while keeping an eye out for any recurrence of attribute-memory corruption during testing.
+Start from the current shield erosion corruption symptom (horizontal striping), validate row/mask indexing in the shield-buffer mutation path against runtime shot coordinates, and lock shield degradation behavior before moving to enemy-shot timing polish. Keep an eye out for any recurrence of attribute-memory corruption during testing.
 
 ## Suggested first prompt for the new chat
-"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as the starting context. Player sprite parity, shield intact art, and saucer visuals are locked; continue with shield degradation/regression fixes and enemy-shot timing polish while monitoring for any attribute-memory corruption recurrence." 
+"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as the starting context. Player sprite parity, shield intact art, and saucer visuals are locked; debug the remaining shield erosion corruption (horizontal striping) in the footprint-based collision path, then continue enemy-shot timing/cleanup polish while monitoring for any attribute-memory corruption recurrence." 

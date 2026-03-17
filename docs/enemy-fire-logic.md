@@ -604,6 +604,5 @@ Our simplified implementation captures the core mechanics while being easier to 
 
 ## Known Issues (Wrap-up, 2026-03-16)
 
-- Shield impacts currently trigger explosion visuals for both player and alien shots, but do not yet consume shield pixels or advance shield degradation.
-- Alien-shot shield explosions can remain frozen one row above the shield line, indicating a render/erase ordering bug in the shield-impact path.
+- Shield impacts now consume shield-buffer pixels through footprint-based erosion, but visual output is still corrupted (horizontal striping/banding after repeated hits).
 - Enemy-shot behavior below the shield line still needs another source-first validation pass before the next gameplay parity session.

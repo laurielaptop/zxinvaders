@@ -540,6 +540,29 @@ EnemyShot_UpdateLoop:
     inc a
     ld (de), a
     pop hl
+
+    ; Arcade behavior: shields block enemy shots.
+    ; Handle this in update so shield damage lands before Shields_Draw and
+    ; explosion slots render cleanly without re-entering collision in draw.
+    ld b, (hl)                    ; B = X
+    ld a, ENEMY_SHOT_WIDTH
+    call Shields_CheckCollision
+    cp 0xFF
+    jr z, .post_shield_check
+
+    push hl
+    call EnemyShot_GetRenderFramePtrForSlot
+    call Shields_OnEnemyShotCollision
+    pop hl
+    push hl
+    call EnemyShot_SetSlotExploding
+    pop hl
+    push hl
+    call EnemyShot_ClearStepCounterForSlot
+    pop hl
+    jr EnemyShot_UpdateOK
+
+.post_shield_check:
     
     ; Source-parity behavior: once a shot has moved below the visible field,
     ; retire it quickly so families don't keep invisible shots alive.
@@ -789,30 +812,6 @@ EnemyShot_DrawLoop:
     ld b, a                      ; B = X
     inc hl
     ld c, (hl)                   ; C = Y
-
-    ; Explosion slots are non-colliding render-only states.
-    ld a, (ix + ENEMY_SHOT_ACTIVE)
-    cp 2
-    jr z, .no_enemy_shield_block
-
-    ; Arcade behavior: shields block enemy shots.
-    ; If this slot overlaps shields, consume shot and skip draw.
-    ld a, ENEMY_SHOT_WIDTH
-    call Shields_CheckCollision
-    cp 0xFF
-    jr z, .no_enemy_shield_block
-
-    ; Shield hit: update shield state, switch slot to explosion, clear step counter.
-    call Shields_OnCollision
-    push ix
-    pop hl
-    call EnemyShot_SetSlotExploding
-    push ix
-    pop hl
-    call EnemyShot_ClearStepCounterForSlot
-    ; Fall through: draw explosion immediately so Erase can cleanly XOR it off next frame.
-
-.no_enemy_shield_block:
 
     ; Pick the current 8-row sprite frame for this slot's family.
     push ix

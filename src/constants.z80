@@ -125,12 +125,18 @@ TIMING_FRAME_PHASE: equ GAME_RAM_BASE + 133             ; 0..2 frame phase (ISR-
 SHIELD_COUNT: equ 4
 SHIELD_ROWS: equ 16
 SHIELD_COLS: equ 3
+SHIELD_BYTES_PER_STAGE: equ SHIELD_ROWS * SHIELD_COLS
+SHIELD_BYTES_PER_SHIELD: equ SHIELD_ROWS * SHIELD_COLS
 SHIELD_HEIGHT: equ 16      ; Intact shield silhouette height on ZX
 SHIELD_WIDTH: equ 24       ; Intact shield silhouette width on ZX
 SHIELD_SPACING: equ 48     ; Horizontal spacing between shield centers (16 shield + 32 gap)
 SHIELD_DAMAGE_STAGES: equ 4 ; 0=intact, 1=1bite, 2=2bites, 3=destroyed
 SHIELD_BASE_Y: equ 144     ; Y position (above player, below aliens)
 SHIELD_BASE_X: equ 28      ; Start X position (keeps shield centers aligned after widening)
+SHIELD_TMP_INDEX: equ GAME_RAM_BASE + 319 ; Temporary scratch for shield routines
+SHIELD_TMP_LEFT: equ GAME_RAM_BASE + 320 ; Shield left X scratch
+SHIELD_TMP_ROW: equ GAME_RAM_BASE + 321 ; Local shield row scratch
+SHIELD_BUFFER_BASE: equ GAME_RAM_BASE + 324 ; 4 * 48 bytes = 192 bytes
 
 ; Shield state: one byte per shield (damage level, 0..3)
 SHIELD_STATE: equ GAME_RAM_BASE + 165

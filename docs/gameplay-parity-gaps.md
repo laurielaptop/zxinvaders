@@ -4,7 +4,7 @@ This note captures missing gameplay elements that must be documented from `resou
 
 ## Scope Confirmed
 
-1. Protective bases/shields ✅ COMPLETE
+1. Protective bases/shields (in progress)
 2. Saucer/UFO bonus ship ✅ COMPLETE
 3. Multiple alien shot families
 4. Alien row-specific graphics and animation
@@ -12,7 +12,7 @@ This note captures missing gameplay elements that must be documented from `resou
 
 ## Current ZX Status (March 2026)
 
-- Shields: PARTIAL (4 shields with correct spacing and ROM-derived intact bitmap; damage/degradation behavior remains simplified)
+- Shields: PARTIAL (4 shields with correct spacing and ROM-derived intact bitmap; impact wiring now mutates the shield buffer from projectile footprints, but erosion output is still visually corrupted with horizontal striping/banding)
 - Saucer/UFO: COMPLETE (ROM-derived saucer/explosion art, shifted smooth movement, score table 50/100/150/300, hit detection, explosion sequence)
 - Alien shot families: COMPLETE (rolling/plunger/squiggly scheduling, reload gating, targeting rules, interleaved motion, and source-derived family sprite animation are implemented)
 - Alien row graphics/animation: COMPLETE (row type A/B/C mapping and 2-frame animation from ROM-derived tables)
@@ -107,8 +107,8 @@ Note: original logic initializes **4 shields** (`LD C,$04` at `resources/source.
 
 ## Known Issues (Current)
 
-- Shield-impact damage is currently missing for both player and alien shots: impacts trigger the shot explosion visuals, but the shield bitmap/degradation state is not being consumed yet.
-- Alien-shot shield impacts can leave the explosion visually frozen just above the shield line instead of resolving cleanly on the next frame.
+- Shield impacts now trigger buffer mutation, but resulting erosion is still wrong: repeated hits produce horizontal line/banding artifacts instead of localized bite-shaped holes.
+- Shield-parity completion is blocked on resolving the remaining buffer/mask corruption in the new projectile-footprint erosion path.
 - Enemy-shot lower-field traversal is inconsistent: some shots pass shield gaps and can kill the player, while many stop progressing visually/functionally before the player area.
 - Enemy-shot family behavior appears stateful across player deaths: initial waves show rolling+squiggly, then some lives switch to mostly/only plunger, and later deaths can switch back.
 - Enemy-shot sprite cleanup has regressions: residual shot pixels/trails can remain on screen after movement.

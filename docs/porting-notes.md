@@ -12,7 +12,7 @@ Active follow-up checklist: `docs/remaining-checklist.md`.
 - Enemy shots are now working with column-table-driven firing and bottom-up alien selection.
 - Basic scoring and HUD score rendering are working.
 - A reusable on-screen debug visualizer exists for enemy-shot lifecycle debugging.
-- **Shields are fully working** with proper erase/draw cycle and spacing (4 shields at Y=144, spaced 48 pixels horizontally).
+- **Shields are partially working**: placement, erase/draw cadence, ROM-derived intact art, and shot-collision wiring are in place, but hit erosion is still visually corrupted (horizontal striping/banding after repeated impacts).
 - **Saucer/UFO is fully implemented** with tuned ZX timing (256 game-loop countdown under current busy-wait pacing), horizontal movement, direction determination based on shot count, score table advancement (50/100/150/300 points), hit detection, and explosion sequence.
 - **Player and alien explosion systems are implemented** (timed animation, hit-triggered state machines, and cleanup).
 - **Task 1 (lives + game-over/restart) is complete**: HUD lives digit renders correctly, lives decrement on hit, game-over mode triggers at zero lives, screen clears and "GAME OVER" banner is shown, and restart is available via fire key or auto-timeout (180 frames).
@@ -24,8 +24,8 @@ Active follow-up checklist: `docs/remaining-checklist.md`.
 - **Gameplay pacing has been tuned up again** for broader responsiveness: `Timing_WaitShort` loop reduced to 2800, alien march delay reduced to 7, player shot speed increased to 6, enemy shot speed increased to 3, and enemy family fire delay reduced to 18.
 - **Player sprite corruption root cause identified**: `Player_Draw` was clobbering the sprite-table pointer by reusing `DE` for both pointer state and row bytes, producing random dot/line output regardless of table choice. The draw path now keeps the pointer separate.
 - **Player sprite parity is now complete**: the final player sprite is locked to the ROM-derived `PlayerSprite` data from `resources/source.z80:1C60`, using the `rot90cw` transform for the current ZX renderer.
-- **Shield intact-art parity is now locked**: shields draw from ROM-derived `ShieldImage` data (`resources/source.z80:1D20`) adapted to the current 24x16 ZX renderer and validated in emulator. Damage/degradation logic is still simplified.
-- **Temporary shot-debug mode (2026-03-16)**: shield init/erase/draw calls are currently disabled in `src/main.z80` so enemy-shot travel and player-collision behavior can be validated without shield interference. Re-enable these calls before resuming shield degradation/parity work.
+- **Shield intact-art parity is now locked**: shields draw from ROM-derived `ShieldImage` data (`resources/source.z80:1D20`) adapted to the current 24x16 ZX renderer and validated in emulator.
+- **Shield impact wiring update (2026-03-17)**: player/enemy shots now call dedicated projectile-footprint erosion routines that mutate per-shield bitmap buffers. Remaining bug: output corruption appears as horizontal striping in shields after several hits.
 - **Saucer visual parity is now substantially improved**: saucer and explosion art are ROM-derived, movement is now 1-pixel smooth via shifted drawing, and a temporary `H` dev trigger exists to exercise the hit path during this development cycle.
 - **Alien renderer scanline stepping is corrected for ZX screen layout** to avoid split sprites across memory boundaries.
 - **Source-first graphics parity analysis is complete** for player/aliens/saucer/shields/shots and animation frame behavior.
@@ -106,6 +106,11 @@ Active follow-up checklist: `docs/remaining-checklist.md`.
       2. Align shield collision X bounds to the same byte boundary used by shield drawing.
    - Result: shields now block shots from both directions across full width, including the left edge.
 
+- **Shield impact mutation path — PARTIAL (2026-03-17).**
+   - Update: shield collision now routes into footprint-based buffer mutation for player and enemy shots.
+   - Remaining issue: erosion visuals still corrupt into horizontal lines after repeated hits, so shield parity is not complete.
+   - Next step: validate row-mask pointer and local pixel addressing against runtime coordinates in `src/game/shields.z80`.
+
 - **Enemy-shot traversal — FIXED and VERIFIED (2026-03-16 ~17:45).**
    - **Root cause**: Rendering boundary `Y >= 192` did NOT match retirement boundary `Y >= 200`. Shots disappeared from screen but remained alive in memory, creating the false impression they "stopped" mid-flight.
    - **Fix applied**:
@@ -132,7 +137,7 @@ Active follow-up checklist: `docs/remaining-checklist.md`.
 - Alien shot system now implements three-family scheduling and gameplay behavior with source-derived shot assets integrated; remaining work is timing/cleanup polish and shield-impact parity.
 - Alien rendering now uses row-specific arcade-derived sprite families and frame toggling.
 - Player sprite now matches the original silhouette in-game using ROM-derived data with the locked `rot90cw` transform.
-- Shields now use ROM-derived intact artwork, but shield damage/collision degradation remains simplified.
+- Shields now use ROM-derived intact artwork and footprint-based impact mutation, but degradation output still shows corruption and is not parity-accurate yet.
 - Sprite source mapping and render/animation behavior are now documented in `docs/graphics-animation-parity.md`.
 - Explosion animation parity is partial: player and alien explosions are in place; remaining parity gaps are secondary shot/saucer side-effect details.
 - Late-wave bug fix (2026-03-15): exploding aliens are now removed from the live grid immediately so enemy shots cannot appear to fire from empty space.
@@ -170,7 +175,7 @@ Target documents to produce/extend next (only if still missing or outdated):
    - Slice 8 (2026-03-15): `EnemyShot_Update` now advances only the family matching `TIMING_FRAME_PHASE` each frame (rolling/plunger/squiggly interleave), moving shot motion closer to original staggered scheduler behavior.
    - Follow-up parity polish remains: ISR-timed scheduling precision, late-wave source validation, and shot cleanup consistency in edge cases.
 2. Continue monitoring the **attribute-square issue** across repeated gameplay sessions; it was not reproduced during the current player-parity and shield-art work.
-3. Revisit/complete shields parity details (damage/collision behavior remains simplified).
+3. Revisit/complete shields parity details (resolve remaining erosion corruption in the footprint mutation path).
 4. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.
 5. Verify and lock all shot-family/explosion parity assets in active gameplay paths; remove any stale fallback paths if present.
 6. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).

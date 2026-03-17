@@ -7,12 +7,19 @@
 ; Shields_Init
 ; Initialize 4 shields to full/undamaged state
 Shields_Init:
-    ld hl, SHIELD_STATE
-    ld b, SHIELD_COUNT
+    xor a                   ; A = shield index
 .init_loop:
-    ld (hl), 0              ; Damage level 0 = fully intact
-    inc hl
-    djnz .init_loop
+    push af
+    call Shields_GetBufferPtrForIndex
+    push hl
+    ld hl, ShieldImageTemplate
+    pop de
+    ld bc, SHIELD_BYTES_PER_SHIELD
+    ldir
+    pop af
+    inc a
+    cp SHIELD_COUNT
+    jr nz, .init_loop
     call Shields_Draw
     ret
 
@@ -22,6 +29,8 @@ Shields_Draw:
     ld b, 0                 ; B = shield index (0-3)
 .draw_loop:
     push bc                 ; Save shield index
+    ld a, b                 ; Preserve shield index for damage-state lookup
+    push af
     
     ; Calculate X position: SHIELD_BASE_X + (SHIELD_SPACING * B)
     ld a, b                 ; A = shield index
@@ -30,8 +39,10 @@ Shields_Draw:
     add SHIELD_BASE_X       ; A = SHIELD_BASE_X + offset
     ld b, a                 ; B = X coordinate
     ld c, SHIELD_BASE_Y     ; C = Y coordinate
+
+    pop af                  ; A = shield index
     
-    call Shield_DrawBlock   ; Draw with B=X, C=Y
+    call Shield_DrawBlock   ; Draw with B=X, C=Y, A=shield index
     
     pop bc                  ; Restore shield index  
     inc b                   ; Next shield
@@ -42,15 +53,19 @@ Shields_Draw:
 
 ; Shield_DrawBlock
 ; Draw a single shield block at (B=X, C=Y)
-; Current parity slice uses a monochrome intact shield silhouette.
+; Uses mutable per-shield bitmap data in SHIELD_BUFFER_BASE.
 Shield_DrawBlock:
     push bc
     push de
+    push hl
     push ix
-    
-    ld ix, ShieldImageZX
+
+    call Shields_GetBufferPtrForIndex
     ld d, SHIELD_HEIGHT      ; D = rows to draw
     ld e, c                  ; E = Y counter
+
+    push hl
+    pop ix
     
 .draw_rows:
     ld a, b                  ; A = X
@@ -74,6 +89,7 @@ Shield_DrawBlock:
     jr nz, .draw_rows
 
     pop ix
+    pop hl
     pop de
     pop bc
     ret
@@ -132,20 +148,186 @@ Shield_EraseBlock:
     pop bc
     ret
 
-; Shields_OnCollision (A=shield_index)
-; Called when a shot hits a shield; increment damage level
-Shields_OnCollision:
-    push af
-    ld hl, SHIELD_STATE
-    add l                   ; HL += A (get shield state byte)
+; Shields_OnPlayerShotCollision
+; Input:
+;   A = shield index
+;   B = shot X
+;   C = shot Y
+Shields_OnPlayerShotCollision:
+    ld hl, PlayerShotShieldRows
+    jr Shields_ApplyProjectileMask
+
+; Shields_OnEnemyShotCollision
+; Input:
+;   A = shield index
+;   B = shot X
+;   C = shot Y
+;   HL = pointer to 8 projectile row masks (bit 7 = left-most projectile pixel)
+Shields_OnEnemyShotCollision:
+    ; Fall through into common projectile-mask blit.
+
+; Shields_ApplyProjectileMask
+; Clear shield-buffer pixels using the projectile's actual rendered footprint.
+Shields_ApplyProjectileMask:
+    ld (SHIELD_TMP_INDEX), a
+    push bc
+    push de
+    push ix
+
+    ld d, b                  ; D = projectile X
+    ld e, c                  ; E = projectile Y
+
+    ; Compute aligned shield left edge for this index.
+    ld a, (SHIELD_TMP_INDEX)
+    ld b, a
+    ld a, b
+    ld b, SHIELD_SPACING
+    call Mult_A_By_B
+    add SHIELD_BASE_X
+    and 0xF8
+    ld (SHIELD_TMP_LEFT), a
+
+    ; Resolve shield bitmap base pointer in IX.
+    ; HL currently points at the projectile row-mask table; save it first because
+    ; Shields_GetBufferPtrForIndex returns its result in HL, clobbering the pointer.
+    push hl                  ; Save projectile row-mask pointer
+    ld a, (SHIELD_TMP_INDEX)
+    call Shields_GetBufferPtrForIndex
+    push hl
+    pop ix                   ; IX = shield buffer base
+    pop hl                   ; Restore projectile row-mask pointer
+
+    ld b, 8
+.row_loop:
+    ld a, e
+    cp SHIELD_BASE_Y
+    jr c, .next_row
+    cp SHIELD_BASE_Y + SHIELD_HEIGHT
+    jr nc, .next_row
+
+    sub SHIELD_BASE_Y
+    ld (SHIELD_TMP_ROW), a
+
+    push bc
     ld a, (hl)
-    inc a
-    cp SHIELD_DAMAGE_STAGES
-    jr c, .ok               ; Not exceeded max damage
-    ld a, SHIELD_DAMAGE_STAGES - 1  ; Cap at max
-.ok:
-    ld (hl), a
+    or a
+    jr z, .row_done
+
+    ld c, 0
+    ld b, 8
+.bit_loop:
+    add a, a                 ; Carry = next projectile bit (bit 7 first)
+    jr nc, .next_bit
+
+    push af
+    push hl
+    ld a, d
+    add a, c                 ; Absolute X for this projectile pixel
+    ld l, a
+    ld a, (SHIELD_TMP_LEFT)
+    ld h, a
+    ld a, l
+    cp h
+    jr c, .skip_pixel
+
+    ld a, h
+    add a, SHIELD_WIDTH
+    cp l
+    jr c, .skip_pixel
+    jr z, .skip_pixel
+
+    ld a, l
+    sub h                    ; A = local X within shield
+    push bc                  ; Save bit-offset counter (C) before using C for local_x
+    ld c, a
+    ld a, (SHIELD_TMP_ROW)
+    call Shields_ClearLocalPixel
+    pop bc                   ; Restore bit-offset counter in C
+
+.skip_pixel:
+    pop hl
     pop af
+
+.next_bit:
+    inc c
+    djnz .bit_loop
+
+.row_done:
+    pop bc
+
+.next_row:
+    inc hl
+    inc e
+    djnz .row_loop
+
+    pop ix
+    pop de
+    pop bc
+    ret
+
+; Shields_GetBufferPtrForIndex
+; Input:  A = shield index (0..SHIELD_COUNT-1)
+; Output: HL = pointer to shield bitmap buffer (48 bytes)
+Shields_GetBufferPtrForIndex:
+    push de
+    ld hl, SHIELD_BUFFER_BASE
+    or a
+    jr z, .ready
+    ld de, SHIELD_BYTES_PER_SHIELD
+.stride_loop:
+    add hl, de
+    dec a
+    jr nz, .stride_loop
+.ready:
+    pop de
+    ret
+
+; Shields_ClearLocalPixel
+; Input:
+;   A = local row (0..15)
+;   C = local X within shield (0..23)
+;   IX = shield buffer base
+Shields_ClearLocalPixel:
+    push bc
+    push de
+    push hl
+
+    ld e, a                 ; E = row
+    add a, a
+    add a, e                ; A = row * 3
+    ld e, a
+
+    ld a, c
+    srl a
+    srl a
+    srl a                   ; A = byte offset
+    add a, e
+    ld e, a
+    ld d, 0
+
+    push ix
+    pop hl
+    add hl, de              ; HL = target byte within shield buffer
+
+    ld a, c
+    and 0x07                ; Bit position within byte
+    ld b, a
+    ld a, 0x80
+    inc b
+.mask_shift:
+    dec b
+    jr z, .mask_ready
+    srl a
+    jr .mask_shift
+
+.mask_ready:
+    cpl
+    and (hl)
+    ld (hl), a
+
+    pop hl
+    pop de
+    pop bc
     ret
 
 ; Shields_Reset
@@ -250,12 +432,15 @@ Mult_A_By_B:
     pop bc
     ret
 
-; Shield silhouette derived from ROM ShieldImage at 1D20 (resources/source.z80).
+PlayerShotShieldRows:
+    db 0x80, 0x80, 0x80, 0x80, 0x00, 0x00, 0x00, 0x00
+
+; Intact shield template derived from ROM ShieldImage at 1D20 (resources/source.z80).
 ; Transform: rot90cw+vflip on the 22x16 ROM bitmap, centred in 24px (1px each side),
 ; then mirrored horizontally, with only the upper 8-row band flipped on the
 ; horizontal axis to match validated in-game top-cap orientation.
 ; 24x16, packed as 3 bytes per row.
-ShieldImageZX:
+ShieldImageTemplate:
     db 0x07, 0xFF, 0xE0
     db 0x0F, 0xFF, 0xF0
     db 0x1F, 0xFF, 0xF8

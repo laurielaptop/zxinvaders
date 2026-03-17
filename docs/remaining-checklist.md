@@ -5,12 +5,12 @@ This checklist consolidates the current parity and stabilization work that is st
 ## P0 - Fix current gameplay regressions
 
 - [ ] Implement shield degradation on impact for both player and enemy shots.
-  - Evidence: impacts currently explode but do not consume shield pixels.
+  - Evidence: impacts now consume shield-buffer pixels, but repeated hits still produce horizontal-line corruption instead of localized erosion.
   - Primary docs: `docs/handoff-next-chat.md`, `docs/gameplay-parity-gaps.md`, `docs/shields-logic.md`.
-  - Done when: repeated shield hits visibly erode shield shape and update collision behavior.
+  - Done when: repeated shield hits visibly erode shield shape without striping/corruption and update collision behavior.
 
-- [ ] Fix alien-shot shield explosion freeze above shield line.
-  - Evidence: explosion can remain visually frozen one row above shields.
+- [x] Fix alien-shot shield explosion freeze above shield line.
+  - Evidence: same-frame explosion draw/next-frame erase ordering now runs without the previously reported stuck frame above shields.
   - Primary docs: `docs/handoff-next-chat.md`, `docs/enemy-fire-logic.md`.
   - Done when: explosion appears and clears cleanly with no stuck frame artifacts.
 
@@ -72,7 +72,7 @@ Use this section to turn P0/P1 items into concrete code-edit sessions.
 
 - [ ] Shield degradation implementation pass
   - Files: `src/game/shields.z80`, `src/constants.z80`.
-  - Deliverables: impact/degradation state model, deterministic mask consumption, and stable redraw/erase behavior.
+  - Deliverables: correct projectile-footprint mask consumption (no horizontal striping), deterministic local pixel clears, and stable redraw/erase behavior.
 
 - [ ] Player-shot shield impact wiring
   - Files: `src/game/shot.z80`, `src/game/shields.z80`.

@@ -103,7 +103,8 @@ Screen shields:   0x2806 (and +0x02E0 for each of 4 shields)
 - Orientation is locked in `ShieldImageZX` and should not be reworked unless new visual evidence appears.
 - Player and enemy shots are blocked by shields (pre-draw collision gate).
 - Collision bounds are aligned to the same byte boundary used by shield rendering to avoid left-edge pass-through.
-- Damage/degradation is still simplified and does not yet match full arcade erosion parity.
+- Shield impact wiring now applies projectile footprint masks into the shield buffer (`Shields_OnPlayerShotCollision` / `Shields_OnEnemyShotCollision`).
+- Remaining issue: erosion output is still corrupted (horizontal line/banding artifacts after repeated hits), so parity is not complete yet.
 
 ### Collision & Degradation Algorithm (Authentic Arcade Behavior)
 
@@ -143,13 +144,18 @@ LD (HL), A                      ; Store degraded bitmap
 2. **Sprite Format**: Instead of arcade byte-oriented bitmap, use ZX bit-shifted rendering.
 3. **Damage Integration**: Wire `Shields_CheckCollision` into shot draw paths to test AND collision; erosion then happens naturally when shots render over shields.
 
-### Implementation Plan
+### Current ZX Approach
 
-1. Define 4 shield initial patterns (bite-damaged variants for degradation).
-2. Maintain shield states in RAM (one byte per shield tracking degradation level 0–3).
-3. Draw shields based on current degradation state + reference alien offset (like aliens).
-4. On shot collision with shield: increment degradation, redraw shield sprite.
-5. On player wipe/level reset: restore shields to full state.
+1. Keep one mutable 24x16 bitmap buffer per shield (`SHIELD_BUFFER_BASE`).
+2. Initialize/reset each shield from the ROM-derived intact template.
+3. On collision, apply the projectile's actual 8-row mask footprint to clear matching pixels in the shield buffer.
+4. Draw the shield from buffer every frame in the main erase/update/draw cadence.
+5. Keep collision checks byte-aligned to the same shield-left alignment used by draw.
+
+### Active Gap
+
+- The footprint-clearing path still produces horizontal striping corruption in gameplay captures.
+- Next debugging focus is row/mask addressing correctness inside `Shields_ApplyProjectileMask` and `Shields_ClearLocalPixel` so only intended local pixels are cleared.
 
 ### Proposed ZX Addition to `src/constants.z80`
 
@@ -179,23 +185,24 @@ The actual visual degradation is **automatic**: shots rendering over shield pixe
 ### ZX Implementation File
 
 `src/game/shields.z80` currently provides:
-- `Shields_Init`: Initialize 4 shields to full state (restore intact bitmap from ROM artwork to screen)
-- `Shields_Draw`: Draw all 4 shields on each frame (always draws current bitmap, which may have been eroded by shots)
-- `Shields_Erase`: Erase shields before redraw (clears the 4 shield rectangles)
-- `Shields_OnCollision`: Called when shot collision is detected (currently increments per-shield state counter)
+- `Shields_Init`: Initialize 4 shields to full state (copy intact template into per-shield buffers)
+- `Shields_Draw`: Draw all 4 shields from their mutable buffers each frame
+- `Shields_Erase`: Erase shield draw rectangles before redraw
+- `Shields_OnPlayerShotCollision`: Apply player-shot footprint mask on hit
+- `Shields_OnEnemyShotCollision`: Apply active enemy-shot frame footprint mask on hit
 - `Shields_CheckCollision`: AABB collision test with byte-aligned shield X bounds (INPUT: B=X, C=Y, A=width; OUTPUT: A=shield_index or 0xFF if no hit)
-- `Shields_Reset`: Restore all shields to full state (level/game reset, restores intact bitmap from ROM)
+- `Shields_Reset`: Restore all shields to full state (level/game reset)
 
 ## Integration Points
 
 1. **Player shot draw path** (`src/game/shot.z80`):
-   - Test shield collision before rendering shot
-   - If collision detected (A ≠ 0xFF): call `Shields_OnCollision`, deactivate shot, skip draw
+   - Test shield collision during shot update before rendering
+   - If collision detected (A ≠ 0xFF): call `Shields_OnPlayerShotCollision`, move shot to one-frame explosion state
    - Result: player shots are blocked by shields from below
 
 2. **Enemy shot draw path** (`src/game/enemy_shot.z80`):
-   - Test shield collision before rendering shot
-   - If hit: call `Shields_OnCollision`, deactivate slot, clear family step counter, skip draw
+   - Test shield collision during enemy-shot update
+   - If hit: call `EnemyShot_GetRenderFramePtrForSlot` and then `Shields_OnEnemyShotCollision` so erosion uses the active animated frame
    - Result: enemy shots are blocked by shields from above
 
 3. **Shields_CheckCollision implementation**:

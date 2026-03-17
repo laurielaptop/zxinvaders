@@ -85,6 +85,25 @@ Shot_UpdateLoop:
     
     ; Update Y position
     ld (hl), a
+
+    ; Arcade behavior: shields block player shots.
+    ; Handle this in update so shield damage is visible before Shields_Draw.
+    ld c, a                  ; C = updated Y
+    dec hl                   ; Back to X
+    ld b, (hl)               ; B = X
+    ld a, SHOT_WIDTH
+    call Shields_CheckCollision
+    cp 0xFF
+    jr z, Shot_UpdateNext
+
+    call Shields_OnPlayerShotCollision
+
+    inc hl                   ; Y
+    ld (hl), c               ; Keep Y synchronized
+    inc hl                   ; PREV_Y
+    ld (hl), c
+    inc hl                   ; ACTIVE
+    ld (hl), 2               ; One-frame explosion
     jr Shot_UpdateNext
 
 Shot_UpdateFinishExplosion:
@@ -234,32 +253,6 @@ Shot_DrawLoop:
     inc hl
     ld c, (hl)              ; C = Y
 
-    ; Arcade behavior: shields block player shots.
-    ; If the shot overlaps any shield, consume the shot and skip draw.
-    ld a, SHOT_WIDTH
-    call Shields_CheckCollision
-    cp 0xFF
-    jr z, .no_shield_block
-
-    ; Shield hit: update shield state and deactivate this shot.
-    call Shields_OnCollision
-    pop hl
-    push hl
-    ld de, SHOT_ACTIVE
-    add hl, de
-    ld (hl), 2              ; Switch into one-frame explosion state.
-
-    ; Keep PREV_Y aligned so erase can remove the explosion next frame.
-    pop hl
-    push hl
-    inc hl                  ; Point to Y
-    ld a, (hl)
-    inc hl                  ; Point to PREV_Y
-    ld (hl), a
-    jp Shot_DrawExplosion   ; Draw one-frame explosion then Erase undoes it next frame.
-
-.no_shield_block:
-    
     ; Build bit mask for this X bit
     ld a, b
     and 0x07                ; Bit position within byte (0-7)
