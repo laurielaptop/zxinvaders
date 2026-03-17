@@ -3,6 +3,8 @@
 ## Goal
 Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing hardware-specific layers.
 
+Active follow-up checklist: `docs/remaining-checklist.md`.
+
 ## Project Recap (Current State)
 - Core game loop is in place: erase -> update -> draw -> frame wait.
 - Player movement and single player shot are working.
@@ -127,7 +129,7 @@ Port the original 8080 Space Invaders logic to ZX Spectrum 48K while replacing h
 ### Gameplay Parity Gaps (Confirmed)
 - Saucer/UFO bonus target is now implemented (timed top-row flyby + score award based on arcade behavior, with timing currently calibrated for busy-wait frame pacing).
 - Saucer visuals now use ROM-derived ship/explosion sprites with shifted smooth movement; only score-glyph parity remains simplified.
-- Alien shot system now implements three-family scheduling and gameplay behavior, but still uses simplified pixel art rather than fully source-matched shot sprites.
+- Alien shot system now implements three-family scheduling and gameplay behavior with source-derived shot assets integrated; remaining work is timing/cleanup polish and shield-impact parity.
 - Alien rendering now uses row-specific arcade-derived sprite families and frame toggling.
 - Player sprite now matches the original silhouette in-game using ROM-derived data with the locked `rot90cw` transform.
 - Shields now use ROM-derived intact artwork, but shield damage/collision degradation remains simplified.
@@ -142,7 +144,7 @@ For each missing gameplay element, we must complete a short 8080 behavior note b
 3. Define ZX adaptation contract: what must remain behaviorally identical, and what is platform-adjusted.
 4. Implement only after steps 1-3 are documented and reviewed.
 
-Target documents to produce/extend next:
+Target documents to produce/extend next (only if still missing or outdated):
 - `docs/gameplay-parity-gaps.md`
 - `docs/lives-and-game-over-logic.md`
 - `docs/wave-clear-logic.md` ✅ complete
@@ -154,7 +156,7 @@ Target documents to produce/extend next:
 - `docs/explosions-logic.md`
 
 ### Remaining Steps
-1. **Enemy-shot parity polish**: keep the current family scheduler, but replace simplified projectile graphics with source-matched shot pixel art and tighten ISR-timed scheduling precision (see `docs/enemy-fire-logic.md`).
+1. **Enemy-shot parity polish**: keep the current family scheduler and tighten ISR-timed scheduling precision plus late-wave cleanup/validation (see `docs/enemy-fire-logic.md`).
    - Source analysis refresh completed (2026-03-15): scheduler gating (`shotSync`), reload-rate lookup tables (`1CB8`/`1AA1`/`1AA5`), and plunger/squiggly table wrap points are now documented for implementation.
    - Implementation slice 1 completed: scheduler/reload parity state scaffolding (`ENEMY_SHOT_SYNC_PHASE`, `ENEMY_SHOT_RELOAD_RATE`) added without changing current firing behavior.
    - Implementation slice 2 completed: enemy-shot runtime is now split into three dedicated family slots with round-robin family selection, while projectile visuals and firing-source logic remain intentionally simplified.
@@ -166,11 +168,11 @@ Target documents to produce/extend next:
    - Cadence tune (2026-03-15): global family fire-attempt gate reduced from 60 to 20 frames to better match three-family scheduling density while retaining stable guard logic.
    - ISR timing scaffold (2026-03-15): `TIMING_FRAME_PHASE` now ticks 0->1->2 each frame in `Timing_WaitShort`, and `EnemyShot_TryFire` now samples that phase for family selection while retaining the stable 20-frame global fire gate.
    - Slice 8 (2026-03-15): `EnemyShot_Update` now advances only the family matching `TIMING_FRAME_PHASE` each frame (rolling/plunger/squiggly interleave), moving shot motion closer to original staggered scheduler behavior.
-   - Follow-up parity polish remains: ISR-timed scheduling precision and fully source-matched shot pixel art in a wider shifted-sprite renderer path.
+   - Follow-up parity polish remains: ISR-timed scheduling precision, late-wave source validation, and shot cleanup consistency in edge cases.
 2. Continue monitoring the **attribute-square issue** across repeated gameplay sessions; it was not reproduced during the current player-parity and shield-art work.
 3. Revisit/complete shields parity details (damage/collision behavior remains simplified).
 4. Revisit saucer/UFO spawn timing once ISR/vblank pacing replaces busy-wait timing.
-5. Replace remaining placeholder shot graphics with source-derived monochrome sprite tables.
+5. Verify and lock all shot-family/explosion parity assets in active gameplay paths; remove any stale fallback paths if present.
 6. Refine collision parity against original framebuffer overlap behavior (current version uses robust swept slot checks).
 7. End-phase optimization: ISR-synchronized rendering to reduce flicker.
 8. Audio pass: fire, hit, and alien movement sound effects.

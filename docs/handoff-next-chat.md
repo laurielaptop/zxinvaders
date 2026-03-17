@@ -3,6 +3,8 @@
 ## Why this handoff exists
 Player sprite parity is now complete. This handoff captures the verified end state and the most sensible next tasks so a future session can resume without re-opening solved work.
 
+Primary task tracker for follow-up work: `docs/remaining-checklist.md`.
+
 ## Confirmed complete (March 2026)
 - Alien graphics are visually correct in emulator.
 - Alien tables are sourced from original ROM bytes (`1C00..1C50`) and use locked transform `rot90cw+bitrev`.
@@ -17,8 +19,8 @@ Player sprite parity is now complete. This handoff captures the verified end sta
 
 ## Highest-value remaining work
 1. Continue monitoring the historical attribute-memory corruption issue; it was not reproduced during the latest player-parity and shield-art session.
-2. Replace remaining placeholder shot graphics with source-derived monochrome sprite tables and complete shield degradation parity.
-3. Tighten enemy-shot parity from functional to visual/timing polish (source-matched shot art, ISR-timed precision later).
+2. Complete shield degradation parity and fix shield-impact regressions (including frozen alien-shot shield explosions).
+3. Tighten enemy-shot parity from functional to visual/timing polish (cadence/cleanup/source-trace validation).
 
 ## Current known regressions at wrap-up
 - Shield hits from both player and alien shots currently show explosion visuals but do not damage the shield bitmap.
@@ -36,4 +38,4 @@ Player sprite parity is now complete. This handoff captures the verified end sta
 Start from the documented shield-impact regressions, trace the original 8080 shot blow-up/shield logic, and then fix shield degradation plus the frozen alien-shot explosion path while keeping an eye out for any recurrence of attribute-memory corruption during testing.
 
 ## Suggested first prompt for the new chat
-"Use `docs/handoff-next-chat.md` as the starting context. Player sprite parity, shield intact art, and saucer visuals are now locked; continue with source-derived shot graphics and shield degradation while monitoring for any attribute-memory corruption recurrence." 
+"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as the starting context. Player sprite parity, shield intact art, and saucer visuals are locked; continue with shield degradation/regression fixes and enemy-shot timing polish while monitoring for any attribute-memory corruption recurrence." 

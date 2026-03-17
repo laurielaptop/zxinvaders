@@ -59,6 +59,7 @@ make run-zesarux
 ## Notes
 
 - Internal porting and architecture details: `docs/porting-notes.md`
+- Remaining implementation checklist: `docs/remaining-checklist.md`
 - Enemy fire behavior notes: `docs/enemy-fire-logic.md`
 - Sprite/animation parity analysis before graphics replacement: `docs/graphics-animation-parity.md`
 

@@ -1,6 +1,6 @@
 # Graphics and Animation Parity (8080 -> ZX)
 
-This document captures how the original 8080 code generates game graphics and animations, and defines the ZX adaptation contract before we replace placeholder sprites.
+This document captures how the original 8080 code generates game graphics and animations, and defines the ZX adaptation contract used during and after migration from placeholder art.
 
 Scope for this pass:
 - Player sprite
@@ -25,8 +25,8 @@ Important distinction:
 Current project status:
 - Coordinate-space rotation has been considered in movement/logic docs.
 - Alien bitmap orientation is validated in-game and now uses ROM-derived rotated tables.
-- Player bitmap integration is in progress but unresolved due to renderer/table interpretation mismatch.
-- Remaining sprite families still require the same verification gate.
+- Player bitmap orientation is validated in-game and now uses ROM-derived `PlayerSprite` data.
+- Remaining visual parity work is focused on shield degradation behavior and secondary sprite-side effects (for example saucer score glyph parity), not the core sprite family imports.
 
 ### Orientation Verification Gate (Required)
 
@@ -40,12 +40,14 @@ Before replacing any ZX placeholder art, each source sprite set must pass this c
 
 No sprite table is considered parity-ready until this gate is complete.
 
-## Current As-Is Audit (What We Have Now)
+## Historical As-Is Audit (Superseded Snapshot)
+
+This section is preserved for implementation traceability. For current authoritative status, use Section 3 ("Current ZX State vs Required Parity") below.
 
 ### Summary
 
-- Most gameplay sprites in ZX are still placeholders or simplified reinterpretations.
-- We have not yet imported most original 8080 bitmap tables into live rendering.
+- This snapshot captured an earlier state before later parity migrations.
+- Most core gameplay sprite families listed here have since been replaced with source-derived assets.
 - The most likely required transform is byte-level bit-order conversion, not a universal 90-degree rotate.
 
 ### Evidence Snapshot
