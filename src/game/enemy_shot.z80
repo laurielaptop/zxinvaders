@@ -666,27 +666,21 @@ EnemyShot_CheckLoop:
     call Player_GetPosition      ; Returns X in B, Y in C
     pop de
     
-    ; Arcade-style player hit check:
-    ; evaluate a fixed strike line slightly below the player sprite rather
-    ; than full sprite-rectangle overlap. This matches the original behavior
-    ; where shots can travel below the visible ship before triggering a hit.
-
-    ; C = strike-line Y.
+    ; Y overlap: shot [shot_Y, shot_Y+ENEMY_SHOT_HEIGHT) vs player [player_Y, player_Y+PLAYER_HEIGHT)
+    ; No overlap if player_bottom <= shot_top (shot entirely below player).
+    ; No overlap if shot_bottom <= player_top (shot entirely above player).
+    ; C = player_Y, E = shot_Y throughout.
     ld a, c
-    add a, PLAYER_HEIGHT + 2
-    ld c, a
+    add a, PLAYER_HEIGHT       ; A = player bottom
+    cp e                       ; player_bottom vs shot_Y
+    jr c, EnemyShot_NoHit      ; player_bottom < shot_Y: shot below player
+    jr z, EnemyShot_NoHit      ; player_bottom == shot_Y: no overlap
 
-    ; Only test X overlap while shot is passing through a narrow band around
-    ; the strike line (prevents repeated hits over many frames).
-    ld a, e                    ; shot Y
-    cp c
-    jr c, EnemyShot_NoHit      ; shot is still above strike line
-
-    ld a, c
-    add a, ENEMY_SHOT_SPEED + 1
-    cp e
-    jr c, EnemyShot_NoHit      ; shot already below strike window
-    jr z, EnemyShot_NoHit
+    ld a, e
+    add a, ENEMY_SHOT_HEIGHT   ; A = shot bottom
+    cp c                       ; shot_bottom vs player_Y
+    jr c, EnemyShot_NoHit      ; shot_bottom < player_Y: shot above player
+    jr z, EnemyShot_NoHit      ; shot_bottom == player_Y: no overlap
 
     ; Check horizontal overlap for the 3x8 shot footprint.
     ; shot_right <= player_left => no hit
