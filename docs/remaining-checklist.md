@@ -18,10 +18,10 @@ This checklist consolidates the current parity and stabilization work that is st
   - Primary docs: `docs/handoff-next-chat.md`, `docs/enemy-fire-logic.md`.
   - Done when: explosion appears and clears cleanly with no stuck frame artifacts.
 
-- [ ] Re-validate enemy-shot behavior below shields after shield-impact fixes.
-  - Evidence: lower-field traversal/state has been flagged as inconsistent.
+- [x] Re-validate enemy-shot behavior below shields after shield-impact fixes (2026-03-21).
+  - Shots pass through eroded shield channels and reach the player reliably.
+  - Player AABB collision confirmed working: shots kill the player.
   - Primary docs: `docs/handoff-next-chat.md`, `docs/gameplay-parity-gaps.md`.
-  - Done when: all families consistently continue to player zone unless consumed by valid collisions.
 
 ## P1 - Parity polish and timing correctness
 
@@ -77,9 +77,10 @@ Use this section to turn P0/P1 items into concrete code-edit sessions.
 - [x] Shield degradation + player-shot wiring + enemy-shot wiring + main-loop cadence — complete (2026-03-21).
   - All four sub-items resolved in the same architecture redesign session (see P0 above).
 
-- [ ] Lower-field enemy-shot validation pass
-  - Files: `src/game/enemy_shot.z80`, `src/game/player_hit.z80`.
-  - Deliverables: verified shot traversal into player zone and stable player-hit behavior after shield fixes.
+- [x] Lower-field enemy-shot validation pass (2026-03-21).
+  - Shot pass-through: fixed `Shields_CheckCollision` to test the specific bit at shot_X (not the whole byte), so eroded channels flanked by intact pixels are correctly treated as gaps.
+  - Erosion widened: enemy 3→5 px (0xF8), player 4→6 px (0xFC), matching arcade shot pattern widths.
+  - Player AABB collision (from prior session) confirmed: shots kill the player reliably.
 
 - [ ] Attribute-memory safety sweep
   - Files: `src/game/player.z80`, `src/game/player_hit.z80`, `src/game/saucer.z80`, `src/game/shot.z80`, `src/game/enemy_shot.z80`.

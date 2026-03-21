@@ -23,16 +23,16 @@ Primary task tracker: `docs/remaining-checklist.md`.
 - Latest commit on `main`: see `git log -1`.
 - Working tree clean after this session's commit.
 
-## Known remaining issues (minor polish)
+## Confirmed complete (March 2026, continued)
 
-- Erosion channel shape may benefit from visual tuning (8-row depth, pixel mask widths).
-- Enemy-shot behavior below the shield line needs a light validation pass.
-- Attribute-memory corruption risk: not reproduced recently; continue monitoring during long runs.
+- Enemy shots pass through eroded shield channels: `Shields_CheckCollision` now tests the specific bit at shot_X (not the whole byte), preventing false collisions from adjacent intact pixels in the same screen byte.
+- Erosion channels widened to match arcade shot pattern widths: enemy 5 px (0xF8), player 6 px (0xFC).
+- Player AABB collision confirmed: enemy shots reliably kill the player after passing through/below shields.
 
 ## P1 priorities for next session
 
-1. **Enemy-shot timing/cadence polish** — source-trace validation of fire delay and volley density.
-2. **Wave/march parity timing** — pre-wave pause, march speed ramp, late-wave cadence.
+1. **Wave/march parity timing** — pre-wave pause, march speed ramp, late-wave cadence.
+2. **Enemy-shot timing/cadence polish** — source-trace validation of fire delay and volley density.
 3. **Saucer timing parity** — busy-wait → ISR-aligned spawn; source-like score glyph.
 4. **Attribute-memory safety sweep** — write-guard instrumentation if corruption recurs.
 
