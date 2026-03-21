@@ -112,7 +112,7 @@ Shields_OnPlayerShotCollision:
     sub 7                         ; Y_start = shot_Y - 7 (enter shield from below)
     ld c, a
     ld d, 8                       ; 8-row erosion depth (one sprite height)
-    ld e, 0xF0                    ; 4 pixels wide (arcade player shot = 0x0F = 4 bits)
+    ld e, 0xFC                    ; 6 pixels wide (matches arcade player shot pattern width)
     call Shields_PunchChannel
     pop bc
     ret
@@ -124,7 +124,7 @@ Shields_OnPlayerShotCollision:
 ; All registers preserved.
 Shields_OnEnemyShotCollision:
     ld d, 8                       ; 8-row erosion depth (one sprite height)
-    ld e, 0xE0                    ; 3 pixels wide (arcade alien shot footprint)
+    ld e, 0xF8                    ; 5 pixels wide (closer to arcade alien shot pattern width)
     jr Shields_PunchChannel       ; B=shot_X, C=Y_start=shot_Y, D=depth, E=mask
 
 ; Shields_PunchChannel
@@ -292,10 +292,23 @@ Shields_CheckCollision:
     push af                 ; Save for return
     ld a, e                 ; A = shot_X
     call Video_CalcAddress  ; HL = screen byte; C=shot_Y used as Y input
-    ld a, (hl)              ; Read screen byte at shot column
-    or a
-    jr nz, .pixel_confirmed ; Non-zero: real shield pixels here — collision stands
-    ; Byte is zero: shield fully eroded at this column — pass through
+    ; Test the specific bit for shot_X — not the whole byte — so eroded channels
+    ; flanked by intact shield pixels in the same screen byte pass through correctly.
+    ; ZX screen: bit 7 = leftmost pixel of byte group; mask = 0x80 >> (shot_X & 7).
+    ld a, e                 ; A = shot_X (Video_CalcAddress clobbers A)
+    and 7                   ; A = bit offset within byte
+    ld b, a                 ; B = shift count
+    ld a, 0x80              ; A = leftmost pixel mask
+    inc b                   ; inc so dec-before-test loop handles b=0 cleanly
+.pixel_shift:
+    dec b
+    jr z, .pixel_ready
+    srl a
+    jr .pixel_shift
+.pixel_ready:
+    and (hl)                ; Test if this specific pixel is set
+    jr nz, .pixel_confirmed ; Non-zero: real shield pixel here — collision stands
+    ; Pixel is clear: shield eroded at this column — shot passes through
     pop af
     pop hl
     pop de
