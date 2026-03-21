@@ -42,7 +42,8 @@ ALIEN_WIDTH: equ 16
 ALIEN_HEIGHT: equ 8
 
 ; Movement constants
-ALIEN_MOVE_DELAY: equ 7    ; Frames between moves (slower = higher)
+; ALIEN_MOVE_DELAY is no longer a fixed constant: delay = max(1, ALIEN_COUNT_REMAINING >> 3)
+; so the formation speeds up naturally as aliens are killed (mirrors arcade behavior).
 ALIEN_STEP_DOWN: equ 8     ; Pixels to step down at edges
 ALIEN_EDGE_LEFT: equ 8     ; Left screen boundary
 ALIEN_EDGE_RIGHT: equ 72   ; Right boundary (256 - 176 formation width - 8 margin)
@@ -163,6 +164,8 @@ GAME_OVER_FIRE_LATCH: equ GAME_RAM_BASE + 191   ; 0=up, 1=held
 ; ===== Wave Progress =====
 ALIEN_COUNT_REMAINING: equ GAME_RAM_BASE + 192  ; Live aliens left this wave (0 = wave clear)
 WAVE_NUMBER: equ GAME_RAM_BASE + 193            ; Current wave index 0-7 (cycles, displayed as 1-8)
+WAVE_CLEAR_TIMER: equ GAME_RAM_BASE + 222       ; Pre-wave pause countdown (0=idle, >0=counting)
+WAVE_PAUSE_FRAMES: equ 30                       ; ~0.5s pause matching arcade 0x09EF delay
 
 
 ; ===== Saucer (Mystery Ship / UFO) =====

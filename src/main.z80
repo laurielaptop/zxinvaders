@@ -45,7 +45,7 @@ MAIN_LOOP:
     jr z, MAIN_LOOP_PLAYING
 
     cp GAME_MODE_GAME_OVER
-    jr z, MAIN_LOOP_GAME_OVER
+    jp z, MAIN_LOOP_GAME_OVER
 
     ; Fallback to playing if mode is unknown.
     ld a, GAME_MODE_PLAYING
@@ -100,6 +100,19 @@ MAIN_LOOP_PLAYING:
     jp MAIN_LOOP_EARLY_EXIT
 
 MAIN_LOOP_WAVE_CLEAR:
+    ; Pre-wave pause: ~0.5s countdown before advancing to the next wave.
+    ; Mirrors arcade 0x09EF delay (0x0A3C). Timer=0 means pause not yet started.
+    ld hl, WAVE_CLEAR_TIMER
+    ld a, (hl)
+    or a
+    jr nz, .wc_ticking          ; Already counting down
+    ; First entry: start the pause.
+    ld (hl), WAVE_PAUSE_FRAMES
+    jp MAIN_LOOP_EARLY_EXIT
+.wc_ticking:
+    dec (hl)
+    jr nz, MAIN_LOOP_EARLY_EXIT ; Still waiting
+    ; Pause complete — start next wave (timer is now 0, ready for next wave clear).
     call Aliens_NewWave
     ; Fall through to early-exit so the new wave draws clean on the next frame.
 
