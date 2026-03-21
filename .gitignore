@@ -4,3 +4,6 @@ dist/*
 
 # Local VS Code settings and state
 .vscode/
+
+# Claude Code local settings (personal overrides, not shared)
+.claude/settings.local.json
