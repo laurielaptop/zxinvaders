@@ -97,14 +97,16 @@ Screen shields:   0x2806 (and +0x02E0 for each of 4 shields)
 
 ### Current Status (March 2026)
 
-- Shield placement and erase/draw cadence are implemented.
-- Intact shield artwork now uses ROM-derived `ShieldImage` bytes from `resources/source.z80:1D20`.
+- Shield architecture redesigned (2026-03-21) to match original arcade: shields are drawn **once** to screen at game/wave start; no per-frame erase or redraw.
+- Intact shield artwork uses ROM-derived `ShieldImage` bytes from `resources/source.z80:1D20`.
 - Current in-game intact shield geometry: 24x16 pixels (3 bytes/row), matching the validated emulator silhouette.
-- Orientation is locked in `ShieldImageZX` and should not be reworked unless new visual evidence appears.
-- Player and enemy shots are blocked by shields (pre-draw collision gate).
+- Orientation is locked in `ShieldImageTemplate` and should not be reworked unless new visual evidence appears.
+- Player and enemy shots are blocked by shields (AABB + pixel-level check in `Shields_CheckCollision`).
 - Collision bounds are aligned to the same byte boundary used by shield rendering to avoid left-edge pass-through.
-- Shield impact wiring now applies projectile footprint masks into the shield buffer (`Shields_OnPlayerShotCollision` / `Shields_OnEnemyShotCollision`).
-- Remaining issue: erosion output is still corrupted (horizontal line/banding artifacts after repeated hits), so parity is not complete yet.
+- Pixel-level verification added (2026-03-21): after AABB match, the actual screen byte at the shot column is read; if zero (fully eroded) the collision is rejected and the shot passes through.
+- Shield erosion: `Shields_OnPlayerShotCollision` / `Shields_OnEnemyShotCollision` → `Shields_PunchChannel` clears an 8-row vertical channel **directly from the ZX screen bitmap** using `Video_CalcAddress` + bit-clear per pixel.  No intermediate buffer mutation; erosion is persistent because shields are never redrawn.
+- Erosion depth: 8 rows per hit (one sprite height), matching arcade shot travel per frame.  Player shots erase upward (Y_start = shot_Y − 7); enemy shots erase downward (Y_start = shot_Y).
+- Known remaining: minor visual polish; enemy-shot behavior below the shield line needs a pass.
 
 ### Collision & Degradation Algorithm (Authentic Arcade Behavior)
 
@@ -146,16 +148,11 @@ LD (HL), A                      ; Store degraded bitmap
 
 ### Current ZX Approach
 
-1. Keep one mutable 24x16 bitmap buffer per shield (`SHIELD_BUFFER_BASE`).
-2. Initialize/reset each shield from the ROM-derived intact template.
-3. On collision, apply the projectile's actual 8-row mask footprint to clear matching pixels in the shield buffer.
-4. Draw the shield from buffer every frame in the main erase/update/draw cadence.
-5. Keep collision checks byte-aligned to the same shield-left alignment used by draw.
-
-### Active Gap
-
-- The footprint-clearing path still produces horizontal striping corruption in gameplay captures.
-- Next debugging focus is row/mask addressing correctness inside `Shields_ApplyProjectileMask` and `Shields_ClearLocalPixel` so only intended local pixels are cleared.
+1. Initialize each shield once from the ROM-derived intact template (`ShieldImageTemplate`) via `Shields_Init`.
+2. Draw all 4 shields to screen once at game/wave start; never erased or redrawn during play.
+3. On collision, `Shields_PunchChannel` clears an 8-row vertical channel directly from the ZX screen bitmap using `Video_CalcAddress` + single-bit clear per pixel.
+4. `Shields_CheckCollision` uses AABB for fast rejection, then reads the actual screen byte at the shot column to reject collisions where the shield has been fully eroded.
+5. Collision bounds remain byte-aligned to the same shield-left alignment used by draw to prevent left-edge pass-through.
 
 ### Proposed ZX Addition to `src/constants.z80`
 
@@ -185,13 +182,14 @@ The actual visual degradation is **automatic**: shots rendering over shield pixe
 ### ZX Implementation File
 
 `src/game/shields.z80` currently provides:
-- `Shields_Init`: Initialize 4 shields to full state (copy intact template into per-shield buffers)
-- `Shields_Draw`: Draw all 4 shields from their mutable buffers each frame
-- `Shields_Erase`: Erase shield draw rectangles before redraw
-- `Shields_OnPlayerShotCollision`: Apply player-shot footprint mask on hit
-- `Shields_OnEnemyShotCollision`: Apply active enemy-shot frame footprint mask on hit
-- `Shields_CheckCollision`: AABB collision test with byte-aligned shield X bounds (INPUT: B=X, C=Y, A=width; OUTPUT: A=shield_index or 0xFF if no hit)
-- `Shields_Reset`: Restore all shields to full state (level/game reset)
+
+- `Shields_Init`: Copy intact template into per-shield buffers, draw all 4 shields to screen once
+- `Shields_Draw` / `Shield_DrawBlock`: Draw all 4 shields from buffers; called only from `Shields_Init`
+- `Shields_OnPlayerShotCollision`: Compute Y_start = shot_Y−7 (enter from below), call `Shields_PunchChannel` with 8 rows and 4-pixel mask
+- `Shields_OnEnemyShotCollision`: Call `Shields_PunchChannel` with Y_start=shot_Y, 8 rows and 3-pixel mask
+- `Shields_PunchChannel`: Clear a vertical channel D rows deep at B=shot_X, C=Y_start; skips rows outside shield band; erases individual screen bits via `Video_CalcAddress`
+- `Shields_CheckCollision`: AABB + pixel-level check (INPUT: B=X, C=Y, A=width; OUTPUT: A=shield_index or 0xFF)
+- `Shields_Reset`: Alias for `Shields_Init` (wave/game restart)
 
 ## Integration Points
 

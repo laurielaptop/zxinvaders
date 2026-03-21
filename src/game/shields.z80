@@ -1,11 +1,17 @@
 ; Game/shields.z80 - Protective shields system for ZX Spectrum
-; Based on 8080 arcade logic (4 shields, damage degradation)
-; Tutorial principles applied:
-; - Proper screen address calculation with character row handling
-; - Erase/draw cycle in main loop for proper animation
+; Based on 8080 arcade logic (4 shields, continuous bitmap erosion)
+;
+; Architecture matches original arcade:
+;   - Shields are drawn ONCE to screen at game/wave start (Shields_Init).
+;   - No per-frame erase or redraw; shield pixels are permanent screen content.
+;   - Erosion: on shot collision, the shot's pixel footprint is cleared directly
+;     from the ZX screen via Shields_ApplyProjectileMask.  This mirrors the
+;     arcade DrawSprCollision OR-blit which naturally accumulated set bits, with
+;     erosion happening as shot erase wrote 0s over shield pixels.
+;   - Wave/game reset: Shields_Init redraws intact art from the ROM template.
 
 ; Shields_Init
-; Initialize 4 shields to full/undamaged state
+; Initialize 4 shields to full/undamaged state and draw them to screen once.
 Shields_Init:
     xor a                   ; A = shield index
 .init_loop:
@@ -24,14 +30,16 @@ Shields_Init:
     ret
 
 ; Shields_Draw
-; Draw all 4 shields based on their current damage state
+; Draw all 4 shields from the intact template buffer to screen.
+; Called only from Shields_Init (once per game/wave start).
+; NOT called every frame.
 Shields_Draw:
     ld b, 0                 ; B = shield index (0-3)
 .draw_loop:
     push bc                 ; Save shield index
     ld a, b                 ; Preserve shield index for damage-state lookup
     push af
-    
+
     ; Calculate X position: SHIELD_BASE_X + (SHIELD_SPACING * B)
     ld a, b                 ; A = shield index
     ld b, SHIELD_SPACING    ; B = spacing (48)
@@ -41,10 +49,10 @@ Shields_Draw:
     ld c, SHIELD_BASE_Y     ; C = Y coordinate
 
     pop af                  ; A = shield index
-    
+
     call Shield_DrawBlock   ; Draw with B=X, C=Y, A=shield index
-    
-    pop bc                  ; Restore shield index  
+
+    pop bc                  ; Restore shield index
     inc b                   ; Next shield
     ld a, b
     cp SHIELD_COUNT
@@ -52,8 +60,7 @@ Shields_Draw:
     ret
 
 ; Shield_DrawBlock
-; Draw a single shield block at (B=X, C=Y)
-; Uses mutable per-shield bitmap data in SHIELD_BUFFER_BASE.
+; Draw a single shield block at (B=X, C=Y, A=shield index) from its buffer.
 Shield_DrawBlock:
     push bc
     push de
@@ -66,12 +73,12 @@ Shield_DrawBlock:
 
     push hl
     pop ix
-    
+
 .draw_rows:
     ld a, b                  ; A = X
-    ld c, e                  ; C = Y  
+    ld c, e                  ; C = Y
     call Video_CalcAddress   ; HL = bitmap address
-    
+
     ld a, (ix+0)
     ld (hl), a               ; Draw first 8 pixels
     inc hl
@@ -83,7 +90,7 @@ Shield_DrawBlock:
     inc ix
     inc ix
     inc ix
-    
+
     inc e                    ; Next row
     dec d
     jr nz, .draw_rows
@@ -94,180 +101,112 @@ Shield_DrawBlock:
     pop bc
     ret
 
-; Shields_Erase
-; Erase all 4 shields before redraw
-Shields_Erase:
-    ld c, 0                 ; Shield index 0
-.erase_loop:
-    ; Calculate screen position
-    push bc
-    ld a, c
-    ld b, SHIELD_SPACING    ; Use spacing, not width
-    call Mult_A_By_B
-    add SHIELD_BASE_X
-    ld b, a
-    ld c, SHIELD_BASE_Y
-    
-    ; Erase shield by drawing black (0x00)
-    call Shield_EraseBlock
-    
-    pop bc
-    inc c
-    ld a, c
-    cp SHIELD_COUNT
-    jr nz, .erase_loop
-    ret
-
-; Shield_EraseBlock
-; Erase a single shield block at (B=X, C=Y)
-; Erase current intact shield bitmap area
-Shield_EraseBlock:
-    push bc
-    push de
-    
-    ld d, SHIELD_HEIGHT      ; D = rows to erase
-    ld e, c                  ; E = Y counter
-    
-.erase_rows:
-    ld a, b                  ; A = X
-    ld c, e                  ; C = Y
-    call Video_CalcAddress   ; HL = screen address
-    
-    xor a                    ; A = 0x00 (black)
-    ld (hl), a               ; Clear first 8 pixels
-    inc hl
-    ld (hl), a               ; Clear second 8 pixels
-    inc hl
-    ld (hl), a               ; Clear third 8 pixels
-    
-    inc e                    ; Next row
-    dec d
-    jr nz, .erase_rows
-
-    pop de
-    pop bc
-    ret
-
 ; Shields_OnPlayerShotCollision
-; Input:
-;   A = shield index
-;   B = shot X
-;   C = shot Y
+; Erode shield pixels hit by the player shot.
+; Player shot enters from below (Y decreasing); erode 8 rows ending at hit point.
+; Input: A=shield_index (ignored), B=shot_X, C=shot_Y
+; All registers preserved.
 Shields_OnPlayerShotCollision:
-    ld hl, PlayerShotShieldRows
-    jr Shields_ApplyProjectileMask
+    push bc                       ; Preserve C=shot_Y for caller (shot.z80 uses it after)
+    ld a, c
+    sub 7                         ; Y_start = shot_Y - 7 (enter shield from below)
+    ld c, a
+    ld d, 8                       ; 8-row erosion depth (one sprite height)
+    ld e, 0xF0                    ; 4 pixels wide (arcade player shot = 0x0F = 4 bits)
+    call Shields_PunchChannel
+    pop bc
+    ret
 
 ; Shields_OnEnemyShotCollision
-; Input:
-;   A = shield index
-;   B = shot X
-;   C = shot Y
-;   HL = pointer to 8 projectile row masks (bit 7 = left-most projectile pixel)
+; Erode shield pixels hit by an enemy shot.
+; Enemy shot enters from above (Y increasing); erode 8 rows from hit point down.
+; Input: A=shield_index (ignored), B=shot_X, C=shot_Y, HL=frame_ptr (ignored)
+; All registers preserved.
 Shields_OnEnemyShotCollision:
-    ; Fall through into common projectile-mask blit.
+    ld d, 8                       ; 8-row erosion depth (one sprite height)
+    ld e, 0xE0                    ; 3 pixels wide (arcade alien shot footprint)
+    jr Shields_PunchChannel       ; B=shot_X, C=Y_start=shot_Y, D=depth, E=mask
 
-; Shields_ApplyProjectileMask
-; Clear shield-buffer pixels using the projectile's actual rendered footprint.
-Shields_ApplyProjectileMask:
-    ld (SHIELD_TMP_INDEX), a
+; Shields_PunchChannel
+; Clear a vertical channel D rows deep starting at C=Y_start, at B=shot_X.
+; Rows outside [SHIELD_BASE_Y, SHIELD_BASE_Y+SHIELD_HEIGHT) are skipped.
+; Input:  B = shot_X, C = Y_start, D = row_count, E = mask_byte
+; All registers preserved.
+Shields_PunchChannel:
     push bc
     push de
-    push ix
 
-    ld d, b                  ; D = projectile X
-    ld e, c                  ; E = projectile Y
-
-    ; Compute aligned shield left edge for this index.
-    ld a, (SHIELD_TMP_INDEX)
-    ld b, a
-    ld a, b
-    ld b, SHIELD_SPACING
-    call Mult_A_By_B
-    add SHIELD_BASE_X
-    and 0xF8
-    ld (SHIELD_TMP_LEFT), a
-
-    ; Resolve shield bitmap base pointer in IX.
-    ; HL currently points at the projectile row-mask table; save it first because
-    ; Shields_GetBufferPtrForIndex returns its result in HL, clobbering the pointer.
-    push hl                  ; Save projectile row-mask pointer
-    ld a, (SHIELD_TMP_INDEX)
-    call Shields_GetBufferPtrForIndex
-    push hl
-    pop ix                   ; IX = shield buffer base
-    pop hl                   ; Restore projectile row-mask pointer
-
-    ld b, 8
-.row_loop:
     ld a, e
-    cp SHIELD_BASE_Y
-    jr c, .next_row
-    cp SHIELD_BASE_Y + SHIELD_HEIGHT
-    jr nc, .next_row
+    ld (SHIELD_TMP_LEFT), a       ; Save mask_byte
+    ld a, d                       ; A = row_count (save before D is repurposed)
+    ld d, b                       ; D = shot_X (preserved by Video_CalcAddress)
+    ld e, c                       ; E = current Y
+    ld b, a                       ; B = row_count
 
-    sub SHIELD_BASE_Y
+.pc_row:
+    ; Stop entirely once past the shield bottom.
+    ld a, e
+    cp SHIELD_BASE_Y + SHIELD_HEIGHT
+    jr nc, .pc_done
+
+    ; Skip rows above the shield top without consuming row budget.
+    cp SHIELD_BASE_Y
+    jr c, .pc_skip_row
+
+    ; Row is within the shield: erase pixels.
+    push bc                       ; Save B=row_count
+    ld a, (SHIELD_TMP_LEFT)       ; A = mask_byte
+    ld c, 0                       ; C = bit_offset
+    ld b, 8                       ; B = inner bit counter
+.pc_bit:
+    add a, a                      ; Carry = next pixel (bit 7 = leftmost)
+    jr nc, .pc_next_bit
+
+    push bc                       ; Save B=bit_counter, C=bit_offset
+    push af                       ; Save remaining mask bits
+
+    ld a, d
+    add a, c                      ; A = absolute_X = shot_X + bit_offset
     ld (SHIELD_TMP_ROW), a
 
-    push bc
-    ld a, (hl)
-    or a
-    jr z, .row_done
+    ld c, e                       ; C = current Y
+    call Video_CalcAddress        ; HL = screen byte
 
-    ld c, 0
-    ld b, 8
-.bit_loop:
-    add a, a                 ; Carry = next projectile bit (bit 7 first)
-    jr nc, .next_bit
-
-    push af
-    push hl
-    ld a, d
-    add a, c                 ; Absolute X for this projectile pixel
-    ld l, a
-    ld a, (SHIELD_TMP_LEFT)
-    ld h, a
-    ld a, l
-    cp h
-    jr c, .skip_pixel
-
-    ld a, h
-    add a, SHIELD_WIDTH
-    cp l
-    jr c, .skip_pixel
-    jr z, .skip_pixel
-
-    ld a, l
-    sub h                    ; A = local X within shield
-    push bc                  ; Save bit-offset counter (C) before using C for local_x
-    ld c, a
     ld a, (SHIELD_TMP_ROW)
-    call Shields_ClearLocalPixel
-    pop bc                   ; Restore bit-offset counter in C
+    and 7                         ; A = bit position within byte
+    ld b, a
+    ld a, 0x80
+    inc b
+.pc_shift:
+    dec b
+    jr z, .pc_shifted
+    srl a
+    jr .pc_shift
+.pc_shifted:
+    cpl
+    and (hl)
+    ld (hl), a                    ; Clear bit from screen
 
-.skip_pixel:
-    pop hl
     pop af
-
-.next_bit:
-    inc c
-    djnz .bit_loop
-
-.row_done:
     pop bc
 
-.next_row:
-    inc hl
-    inc e
-    djnz .row_loop
+.pc_next_bit:
+    inc c
+    djnz .pc_bit
+    pop bc                        ; Restore B=row_count
 
-    pop ix
+.pc_skip_row:
+    inc e                         ; Next Y
+    djnz .pc_row                  ; Dec row_count; loop if rows remain
+
+.pc_done:
     pop de
     pop bc
     ret
 
 ; Shields_GetBufferPtrForIndex
 ; Input:  A = shield index (0..SHIELD_COUNT-1)
-; Output: HL = pointer to shield bitmap buffer (48 bytes)
+; Output: HL = pointer to shield bitmap buffer (SHIELD_BYTES_PER_SHIELD bytes)
 Shields_GetBufferPtrForIndex:
     push de
     ld hl, SHIELD_BUFFER_BASE
@@ -282,75 +221,25 @@ Shields_GetBufferPtrForIndex:
     pop de
     ret
 
-; Shields_ClearLocalPixel
-; Input:
-;   A = local row (0..15)
-;   C = local X within shield (0..23)
-;   IX = shield buffer base
-Shields_ClearLocalPixel:
-    push bc
-    push de
-    push hl
-
-    ld e, a                 ; E = row
-    add a, a
-    add a, e                ; A = row * 3
-    ld e, a
-
-    ld a, c
-    srl a
-    srl a
-    srl a                   ; A = byte offset
-    add a, e
-    ld e, a
-    ld d, 0
-
-    push ix
-    pop hl
-    add hl, de              ; HL = target byte within shield buffer
-
-    ld a, c
-    and 0x07                ; Bit position within byte
-    ld b, a
-    ld a, 0x80
-    inc b
-.mask_shift:
-    dec b
-    jr z, .mask_ready
-    srl a
-    jr .mask_shift
-
-.mask_ready:
-    cpl
-    and (hl)
-    ld (hl), a
-
-    pop hl
-    pop de
-    pop bc
-    ret
-
 ; Shields_Reset
-; Reset all shields to fully intact (wave/game restart)
+; Reset all shields to fully intact (wave/game restart).
 Shields_Reset:
     jp Shields_Init
 
 ; Shields_CheckCollision
-; Test if a projectile at (B=X, C=Y) with width in A collides with any shield
+; Test if a projectile at (B=X, C=Y) with width in A collides with any shield.
 ; Input:  B = X coordinate (left edge of projectile)
 ;         C = Y coordinate (top edge of projectile)
 ;         A = projectile width in pixels
-;         (height is always 8 pixels for both player and enemy shots)
 ; Output: A = shield_index (0-3) if collision detected, or 0xFF if no collision
-; Uses simple AABB (axis-aligned bounding box) overlap detection
 Shields_CheckCollision:
     push bc
     push de
     push hl
-    
+
     ld d, a                 ; D = projectile width
     ld e, b                 ; E = shot X (save for X overlap test)
-    
+
     ; Y range check: shields span [SHIELD_BASE_Y, SHIELD_BASE_Y + SHIELD_HEIGHT)
     ; Projectile is 8 pixels tall, so [C, C+8)
     ; Overlap if: C < shield_bottom AND shield_top < C+8
@@ -359,59 +248,72 @@ Shields_CheckCollision:
     cp c
     jr c, .no_hit           ; If shield_bottom < shot_top, no overlap
     jr z, .no_hit           ; If shield_bottom == shot_top, no overlap
-    
+
     ld a, c
     add a, 8                ; A = shot_bottom
     cp SHIELD_BASE_Y        ; If shot_bottom <= shield_top, no overlap
     jr c, .no_hit
     jr z, .no_hit
-    
+
     ; Y overlap confirmed. Now check each of 4 shields for X overlap.
     xor a                   ; A = 0 (shield index)
-    
+
 .check_shield_loop:
     cp SHIELD_COUNT
     jr nc, .no_hit
-    
+
     push af                 ; Save shield index
 
-    ; Calculate shield X position and mirror draw alignment.
-    ; Draw path is byte-aligned via X>>3, so collision must use that same
-    ; aligned left edge to avoid left-edge pass-through.
+    ; Calculate shield X position (byte-aligned, same as draw path).
     ld b, a                 ; B = shield index
     ld a, b
     ld b, SHIELD_SPACING
     call Mult_A_By_B
     add SHIELD_BASE_X
-    and 0xF8                ; align to byte boundary used by draw
+    and 0xF8                ; Align to byte boundary used by draw
     ld b, a                 ; B = shield X
-    
+
     ; X overlap check: shot [E, E+D) and shield [B, B+SHIELD_WIDTH)
-    ; Overlap if: E < shield_right AND shield_left < E+D
     ld a, b
     add a, SHIELD_WIDTH     ; A = shield_right
     cp e
     jr c, .next_shield      ; If shield_right <= shot_left, no overlap
     jr z, .next_shield
-    
+
     ld a, e
     add a, d                ; A = shot_right
     cp b
     jr c, .next_shield      ; If shot_right <= shield_left, no overlap
     jr z, .next_shield
-    
-    ; Collision detected!
+
+    ; Collision detected — verify actual screen pixels at shot column.
+    ; E=shot_X, C=shot_Y are preserved throughout; Video_CalcAddress preserves C,D,E.
+    pop af                  ; A = shield index
+    push af                 ; Save for return
+    ld a, e                 ; A = shot_X
+    call Video_CalcAddress  ; HL = screen byte; C=shot_Y used as Y input
+    ld a, (hl)              ; Read screen byte at shot column
+    or a
+    jr nz, .pixel_confirmed ; Non-zero: real shield pixels here — collision stands
+    ; Byte is zero: shield fully eroded at this column — pass through
+    pop af
+    pop hl
+    pop de
+    pop bc
+    ld a, 0xFF
+    ret
+.pixel_confirmed:
     pop af                  ; A = shield index
     pop hl
     pop de
     pop bc
     ret
-    
+
 .next_shield:
     pop af
     inc a
     jr .check_shield_loop
-    
+
 .no_hit:
     ld a, 0xFF              ; No collision
     pop hl
@@ -420,8 +322,7 @@ Shields_CheckCollision:
     ret
 
 ; Mult_A_By_B
-; Multiply A by B, result in A
-; Simple loop-based multiplication
+; Multiply A by B, result in A.
 Mult_A_By_B:
     push bc
     ld c, a
@@ -431,9 +332,6 @@ Mult_A_By_B:
     djnz .mult_loop
     pop bc
     ret
-
-PlayerShotShieldRows:
-    db 0x80, 0x80, 0x80, 0x80, 0x00, 0x00, 0x00, 0x00
 
 ; Intact shield template derived from ROM ShieldImage at 1D20 (resources/source.z80).
 ; Transform: rot90cw+vflip on the 22x16 ROM bitmap, centred in 24px (1px each side),

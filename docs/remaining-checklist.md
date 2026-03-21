@@ -4,10 +4,14 @@ This checklist consolidates the current parity and stabilization work that is st
 
 ## P0 - Fix current gameplay regressions
 
-- [ ] Implement shield degradation on impact for both player and enemy shots.
-  - Evidence: impacts now consume shield-buffer pixels, but repeated hits still produce horizontal-line corruption instead of localized erosion.
-  - Primary docs: `docs/handoff-next-chat.md`, `docs/gameplay-parity-gaps.md`, `docs/shields-logic.md`.
-  - Done when: repeated shield hits visibly erode shield shape without striping/corruption and update collision behavior.
+- [x] Shield degradation erosion and collision — complete (2026-03-21).
+  - Draw-once architecture: shields drawn once at init/wave-start; no per-frame erase/redraw (fixes flashing).
+  - `Shields_PunchChannel`: 8-row vertical channel erased directly on ZX screen bitmap per hit.  Player shots erase upward (Y_start = shot_Y − 7); enemy shots erase downward (Y_start = shot_Y).
+  - Pixel-level collision check added to `Shields_CheckCollision`: after AABB match, reads screen byte at shot column; returns 0xFF (no collision) if fully eroded, allowing shots to pass through.
+  - Register bugs fixed in `src/game/enemy_shot.z80`: outer-loop B clobbered by `ld b,(hl)` (fixed with push/pop around shield-check section); push/pop balanced across all three exit paths.
+  - Register bug fixed in `src/game/shot.z80`: HL not preserved around `Shields_OnPlayerShotCollision` call (fixed with push/pop).
+  - Primary docs: `docs/shields-logic.md`.
+  - Remaining: minor visual polish; shots pass through fully-eroded columns but erosion shape may need tuning.
 
 - [x] Fix alien-shot shield explosion freeze above shield line.
   - Evidence: same-frame explosion draw/next-frame erase ordering now runs without the previously reported stuck frame above shields.
@@ -70,21 +74,8 @@ This checklist consolidates the current parity and stabilization work that is st
 
 Use this section to turn P0/P1 items into concrete code-edit sessions.
 
-- [ ] Shield degradation implementation pass
-  - Files: `src/game/shields.z80`, `src/constants.z80`.
-  - Deliverables: correct projectile-footprint mask consumption (no horizontal striping), deterministic local pixel clears, and stable redraw/erase behavior.
-
-- [ ] Player-shot shield impact wiring
-  - Files: `src/game/shot.z80`, `src/game/shields.z80`.
-  - Deliverables: collision consume path that triggers shield damage and uses the correct explosion/cleanup ordering.
-
-- [ ] Enemy-shot shield impact wiring and freeze fix
-  - Files: `src/game/enemy_shot.z80`, `src/game/shields.z80`.
-  - Deliverables: same-frame explosion draw plus next-frame erase consistency; no frozen frame above shields.
-
-- [ ] Main-loop shield cadence verification
-  - Files: `src/main.z80`.
-  - Deliverables: shield init/erase/draw/update calls enabled and ordered consistently with shot erase/update/draw cadence.
+- [x] Shield degradation + player-shot wiring + enemy-shot wiring + main-loop cadence — complete (2026-03-21).
+  - All four sub-items resolved in the same architecture redesign session (see P0 above).
 
 - [ ] Lower-field enemy-shot validation pass
   - Files: `src/game/enemy_shot.z80`, `src/game/player_hit.z80`.

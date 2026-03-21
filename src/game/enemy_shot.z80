@@ -544,14 +544,24 @@ EnemyShot_UpdateLoop:
     ; Arcade behavior: shields block enemy shots.
     ; Handle this in update so shield damage lands before Shields_Draw and
     ; explosion slots render cleanly without re-entering collision in draw.
-    ld b, (hl)                    ; B = X
+    ;
+    ; IMPORTANT: push BC here to preserve the outer djnz loop counter in B.
+    ; ld b, (hl) below clobbers B with the shot X coordinate; without saving
+    ; first, UpdateNext's djnz would spin using X-1 as the iteration count.
+    push bc                           ; Save B=outer_loop_counter, C=updated_Y
+    ld b, (hl)                        ; B = X
     ld a, ENEMY_SHOT_WIDTH
     call Shields_CheckCollision
     cp 0xFF
     jr z, .post_shield_check
 
+    ; Save shield_index in D before call -- GetRenderFramePtrForSlot preserves DE
+    ; (it does push de/pop de internally) but clobbers A.
+    ld d, a                           ; D = shield_index
     push hl
-    call EnemyShot_GetRenderFramePtrForSlot
+    call EnemyShot_GetRenderFramePtrForSlot   ; HL = frame ptr, A clobbered, D preserved
+    ld a, d                           ; Restore shield_index into A
+    ; B=X, C=Y still valid (GetRenderFramePtrForSlot preserves BC)
     call Shields_OnEnemyShotCollision
     pop hl
     push hl
@@ -560,16 +570,23 @@ EnemyShot_UpdateLoop:
     push hl
     call EnemyShot_ClearStepCounterForSlot
     pop hl
+    pop bc                            ; Restore B=outer_loop_counter
     jr EnemyShot_UpdateOK
 
 .post_shield_check:
-    
+
     ; Source-parity behavior: once a shot has moved below the visible field,
     ; retire it quickly so families don't keep invisible shots alive.
     ; Retire at Y >= 192 (matches rendering boundary where shots stop drawing).
     ld a, c
     cp 192
-    jr c, EnemyShot_UpdateOK
+    jr c, .shot_still_active
+    pop bc                            ; Restore B=outer_loop_counter
+    jr EnemyShot_UpdateDeactivate
+
+.shot_still_active:
+    pop bc                            ; Restore B=outer_loop_counter
+    jr EnemyShot_UpdateOK
 
 EnemyShot_UpdateDeactivate:
     ; Deactivate from normal (non-overflow) path where HL is already restored.
@@ -756,6 +773,10 @@ EnemyShot_EraseLoop:
     ld c, (hl)                   ; C = PREV_Y
 
     ; Erase the previous sprite footprint with per-row clipping.
+    ; GetRenderFramePtrForSlot expects HL = slot base, but HL currently points to
+    ; PREV_Y (slot+2).  Step back to slot base before passing to the function.
+    dec hl
+    dec hl                               ; HL = slot base
     push hl
     call EnemyShot_GetRenderFramePtrForSlot
     ld d, ENEMY_SHOT_HEIGHT

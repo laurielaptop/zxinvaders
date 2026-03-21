@@ -96,7 +96,9 @@ Shot_UpdateLoop:
     cp 0xFF
     jr z, Shot_UpdateNext
 
+    push hl                  ; Save slot base (HL = slot+0) before call clobbers it
     call Shields_OnPlayerShotCollision
+    pop hl                   ; Restore slot base (Shields_ApplyProjectileMask clobbers HL)
 
     inc hl                   ; Y
     ld (hl), c               ; Keep Y synchronized

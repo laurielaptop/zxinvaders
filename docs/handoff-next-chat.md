@@ -1,40 +1,57 @@
-# Handoff for New Chat: Post-Player-Parity Next Steps
+# Handoff for New Chat: Shield Erosion Complete — Polish Phase
 
 ## Why this handoff exists
-Player sprite parity is now complete. This handoff captures the verified end state and the most sensible next tasks so a future session can resume without re-opening solved work.
 
-Primary task tracker for follow-up work: `docs/remaining-checklist.md`.
+The shield system is now functionally correct. This handoff captures the end state of the shield work and the next sensible tasks.
+
+Primary task tracker: `docs/remaining-checklist.md`.
 
 ## Confirmed complete (March 2026)
-- Alien graphics are visually correct in emulator.
-- Alien tables are sourced from original ROM bytes (`1C00..1C50`) and use locked transform `rot90cw+bitrev`.
-- Player sprite parity is complete.
-- Player source bytes come from `resources/source.z80:1C60`.
-- Locked player transform for the current ZX renderer: `rot90cw`.
-- Root cause of prior player corruption was a renderer bug: `Player_Draw` reused `DE` as both sprite-table pointer and row-data storage.
+
+- Alien graphics visually correct in emulator (ROM-sourced, locked transform).
+- Player sprite parity complete (ROM-sourced, locked transform).
+- Saucer: ROM-derived art, 1-pixel shifted movement, dev-only `H` key hit simulation.
+- Shield architecture redesigned to match arcade: drawn once at init/wave-start, never erased/redrawn.
+- Shield erosion: `Shields_PunchChannel` clears an 8-row vertical channel directly on the ZX screen bitmap per hit.
+- Shield collision: AABB fast-reject + pixel-level screen-byte read; shots pass through fully-eroded columns.
+- Player shots correctly blocked and stopped at shields (HL preservation fix in `shot.z80`).
+- Enemy shots correctly spawn and continue firing after first volley (outer-loop B register fix in `enemy_shot.z80`).
+- Enemy shots blocked by shields; shot passes through when shield column is fully eroded.
 
 ## Current repository state
-- Latest relevant commit on `main`: `022af87` — ignore local VS Code settings.
-- Working tree should be clean apart from any local editor metadata such as `.vscode/`.
 
-## Highest-value remaining work
-1. Continue monitoring the historical attribute-memory corruption issue; it was not reproduced during the latest player-parity and shield-art session.
-2. Complete shield degradation parity by fixing the remaining shield-buffer corruption in projectile-footprint erosion (current symptom: horizontal banding/striping after repeated hits).
-3. Tighten enemy-shot parity from functional to visual/timing polish (cadence/cleanup/source-trace validation).
+- Latest commit on `main`: see `git log -1`.
+- Working tree clean after this session's commit.
 
-## Current known regressions at wrap-up
-- Shield hits now mutate the shield buffer, but visual erosion is still incorrect: repeated impacts generate horizontal-line corruption instead of localized bite marks.
-- Enemy-shot behavior below the shields still needs a source-trace/debug pass before more parity work.
+## Known remaining issues (minor polish)
 
-## Important technical facts confirmed
-1. `make run-zesarux` rebuilds/package-runs the latest TAP correctly.
-2. `Player_NextScanline` / `PlayerHit_NextScanline` fixes are required to avoid attribute RAM spill during tall sprite stepping.
-3. Player parity is solved; do not reopen table-orientation experiments unless new evidence appears.
-4. Shields now use source-derived intact art and footprint-based hit wiring; remaining shield work is fixing corruption in the erosion path.
-5. Saucer visuals now use ROM-derived ship/explosion art with shifted 1-pixel movement; temporary `H` key hit simulation exists for development-only testing.
+- Erosion channel shape may benefit from visual tuning (8-row depth, pixel mask widths).
+- Enemy-shot behavior below the shield line needs a light validation pass.
+- Attribute-memory corruption risk: not reproduced recently; continue monitoring during long runs.
 
-## Recommended next chat focus
-Start from the current shield erosion corruption symptom (horizontal striping), validate row/mask indexing in the shield-buffer mutation path against runtime shot coordinates, and lock shield degradation behavior before moving to enemy-shot timing polish. Keep an eye out for any recurrence of attribute-memory corruption during testing.
+## P1 priorities for next session
+
+1. **Enemy-shot timing/cadence polish** — source-trace validation of fire delay and volley density.
+2. **Wave/march parity timing** — pre-wave pause, march speed ramp, late-wave cadence.
+3. **Saucer timing parity** — busy-wait → ISR-aligned spawn; source-like score glyph.
+4. **Attribute-memory safety sweep** — write-guard instrumentation if corruption recurs.
+
+## P2 (end-phase)
+
+- ISR/vblank-synchronized timing (replace busy-wait pacing).
+- Flicker reduction via render optimization.
+- Audio: shot/fire/hit/march cues.
+
+## Important technical facts
+
+1. `make run-zesarux` rebuilds and runs the latest TAP correctly.
+2. `Video_CalcAddress`: input A=X, C=Y; output HL=screen address; preserves B, C, D, E; clobbers A and HL.
+3. Shields are permanent screen content — never call `Shields_Erase` or `Shields_Draw` from the main loop.
+4. `Shields_PunchChannel` signature: `B=shot_X, C=Y_start, D=row_count, E=mask_byte`.
+5. `Shields_CheckCollision` signature: `B=X, C=Y, A=width`; returns A=shield_index or 0xFF.
+6. Z80 constraint: `ld (nn), r` is only valid for A — other registers must go through the accumulator.
+7. Player sprite parity and shield art are locked; do not reopen unless new visual evidence appears.
 
 ## Suggested first prompt for the new chat
-"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as the starting context. Player sprite parity, shield intact art, and saucer visuals are locked; debug the remaining shield erosion corruption (horizontal striping) in the footprint-based collision path, then continue enemy-shot timing/cleanup polish while monitoring for any attribute-memory corruption recurrence." 
+
+"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as starting context. Shield erosion and collision are complete. Focus next on enemy-shot timing/cadence polish and wave/march parity, while monitoring for attribute-memory corruption."
