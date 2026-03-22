@@ -59,10 +59,10 @@ This checklist consolidates the current parity and stabilization work that is st
   - Files: `src/game/hud.z80`, `src/main.z80`.
   - Done when: score increments visibly on alien/saucer kill; lives display matches lives remaining; hi-score updates when beaten.
 
-- [ ] Colour: green zone for shields and player area.
-  - Scope: set attribute bytes to green ink (paper black, ink green = 0x04) at wave start for the bottom ~6 character rows covering shields and player. No per-frame attribute writes needed — set once per wave.
-  - Files: `src/game/shields.z80` or `src/main.z80` (wave-start hook).
-  - Done when: player ship and shields render in green; alien area remains white; no colour bleed into attribute rows above the shield line.
+- [x] Colour: green zone for shields and player area (2026-03-22).
+  - `Video_SetGreenZone` fills attribute rows 18–23 (Y=144–191) with `ATTR_GREEN` (0x04).
+  - Called once from `Video_Init`; persists across waves since `Video_ClearBitmap` does not touch attributes.
+  - New constants: `ATTR_WHITE` (0x07), `ATTR_GREEN` (0x04), `ATTR_GREEN_ROW` (18), `ATTR_GREEN_COUNT` (6).
 
 - [ ] Game Over screen.
   - Scope: when the player exhausts all lives, show a "GAME OVER" message and return to the attract/start screen after a short delay.
