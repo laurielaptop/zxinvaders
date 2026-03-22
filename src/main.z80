@@ -29,6 +29,8 @@ START:
 
     call Video_Init
     call HUD_Init               ; zero hi-score once at program start
+    call HUD_DrawLabels         ; static header labels (redrawn after each Video_ClearBitmap)
+    call HUD_DrawBottomLine     ; static defense line at Y=183
     call GameState_Init
     call Player_Init
     call Shot_Init

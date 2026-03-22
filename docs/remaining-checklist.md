@@ -55,10 +55,13 @@ This checklist consolidates the current parity and stabilization work that is st
   - Done when: player can see the title screen on launch, select 1 or 2 players, and the game starts correctly.
 
 - [x] In-game HUD: score, hi-score, lives counter with player graphics (2026-03-22).
-  - 4-digit score (16-bit) at top-left X=8; hi-score at top-right X=168; both Y=0.
+  - 4-digit score (16-bit) at top-left X=8, Y=8; hi-score at center X=104, Y=8; P2 score (0000) at X=200, Y=8.
+  - Score header labels: "SCORE<1>" at X=0, "HI-SCORE" at X=88, "SCORE<2>" at X=192 — all at Y=0 using GameOver glyph renderer.
   - `HUD_Draw4Digits`: 16-bit → 4 decimal digits via repeated `sbc hl, de`; uses 4-byte `HUD_SCRATCH` buffer.
-  - `STATE_HI_SCORE` (GAME_RAM_BASE+204) zeroed once by `HUD_Init` at program start; updated each frame when score beats it.
-  - Life icons: `HUD_DrawLifeIcon`/`HUD_EraseLifeIcon` draw `PLAYER_SHIP_CW` (16×8) at Y=184 (green zone, char-row boundary); all slots redrawn each frame so lost lives erase cleanly.
+  - `STATE_HI_SCORE` (GAME_RAM_BASE+227) zeroed once by `HUD_Init` at program start; updated each frame when score beats it.
+  - Life icons: `HUD_DrawLifeIcon`/`HUD_EraseLifeIcon` draw `PLAYER_SHIP_CW` (16×8) at Y=184 (green zone); all slots redrawn each frame. Lives count digit drawn at X=0, Y=184 before icons.
+  - Defense line: solid green pixel line at Y=183 (separates play field from life-icon area). Drawn once after each `Video_ClearBitmap`.
+  - Player moved to Y=168 (was 176): 8px gap to shield bottom (Y=160), matching arcade spacing.
 
 - [x] Colour: green zone for shields and player area (2026-03-22).
   - `Video_SetGreenZone` fills attribute rows 18–23 (Y=144–191) with `ATTR_GREEN` (0x04).

@@ -52,13 +52,19 @@ HUD_Draw:
     ld c, HUD_SCORE_Y
     call HUD_Draw4Digits
 
-    ; --- Draw hi-score (4 digits, top-right) ---
+    ; --- Draw hi-score (4 digits, center) ---
     ld hl, (STATE_HI_SCORE)
     ld b, HUD_HI_SCORE_X
     ld c, HUD_SCORE_Y
     call HUD_Draw4Digits
 
-    ; --- Draw life icons (bottom-left) ---
+    ; --- Draw P2 score (always 0000, top-right) ---
+    ld hl, 0
+    ld b, HUD_SCORE2_X
+    ld c, HUD_SCORE_Y
+    call HUD_Draw4Digits
+
+    ; --- Draw life icons and count (bottom-left) ---
     call HUD_DrawLives
 
     ret
@@ -136,11 +142,17 @@ HUD_Draw4Digits:
 
 ; -----------------------------------------------------------------------
 ; HUD_DrawLives
-; Draws PLAYER_LIVES_START icon slots at HUD_LIVES_Y.
+; Draws the lives count digit then PLAYER_LIVES_START icon slots at HUD_LIVES_Y.
 ; Slots with index <= STATE_LIVES show the ship sprite; others are blank.
 ; Always redraws all slots so lost lives erase cleanly.
 ; -----------------------------------------------------------------------
 HUD_DrawLives:
+    ; Draw lives count digit at X=0 (left of icons)
+    ld a, (STATE_LIVES)
+    ld b, 0                         ; X=0
+    ld c, HUD_LIVES_Y
+    call HUD_DrawDigit
+
     ld d, 1                         ; D = current slot index (1..PLAYER_LIVES_START)
     ld b, HUD_LIVES_ICON_X          ; B = current X
     ld c, HUD_LIVES_Y               ; C = Y (fixed)
@@ -258,6 +270,63 @@ HUD_DrawDigit:
     pop de
     pop bc
     ret
+
+; -----------------------------------------------------------------------
+; HUD_DrawLabels
+; Draws the three static score header labels at Y=0 (above digit row).
+; Call once after each Video_ClearBitmap; labels persist until next clear.
+; Uses GameOver_DrawString / GameOver_DrawGlyph from game_over.z80.
+; -----------------------------------------------------------------------
+HUD_DrawLabels:
+    ; "SCORE<1>" at X=0, Y=0 (7 chars)
+    ld hl, HUD_MsgScore1
+    ld d, 0
+    ld e, 0
+    ld b, 7
+    call GameOver_DrawString
+
+    ; "HI-SCORE" at X=88, Y=0 (8 chars)
+    ld hl, HUD_MsgHiScore
+    ld d, 88
+    ld e, 0
+    ld b, 8
+    call GameOver_DrawString
+
+    ; "SCORE<2>" at X=192, Y=0 (7 chars)
+    ld hl, HUD_MsgScore2
+    ld d, 192
+    ld e, 0
+    ld b, 7
+    call GameOver_DrawString
+
+    ret
+
+; -----------------------------------------------------------------------
+; HUD_DrawBottomLine
+; Draws a solid pixel line across all 32 columns at Y=183 (the last
+; scanline of character row 22, separating the play field from the
+; life-icon area below).  Static — call once after each Video_ClearBitmap.
+; Screen address for Y=183, X=0: 0x57C0.
+; -----------------------------------------------------------------------
+HUD_DrawBottomLine:
+    ld hl, 0x57C0               ; Y=183, X=0
+    ld de, 0x57C1
+    ld bc, 31
+    ld (hl), 0xFF
+    ldir
+    ret
+
+; -----------------------------------------------------------------------
+; Label message strings (glyph index arrays for GameOver_DrawString)
+; -----------------------------------------------------------------------
+HUD_MsgScore1:
+    db GLYPH_S, GLYPH_C, GLYPH_O, GLYPH_R, GLYPH_E, GLYPH_LT, GLYPH_1
+
+HUD_MsgHiScore:
+    db GLYPH_H, GLYPH_I, GLYPH_DASH, GLYPH_S, GLYPH_C, GLYPH_O, GLYPH_R, GLYPH_E
+
+HUD_MsgScore2:
+    db GLYPH_S, GLYPH_C, GLYPH_O, GLYPH_R, GLYPH_E, GLYPH_LT, GLYPH_2
 
 ; -----------------------------------------------------------------------
 ; Digit bitmaps (0–9), 8 bytes each

@@ -497,6 +497,8 @@ Aliens_NewWave:
 
     ; Clear the screen and reinitialise sub-systems
     call Video_ClearBitmap
+    call HUD_DrawLabels
+    call HUD_DrawBottomLine
     call Aliens_Init    ; Resets grid to 55 alive + ALIEN_COUNT_REMAINING=55 + X/Y to defaults
     call AlienHit_Init
     call Shot_Init

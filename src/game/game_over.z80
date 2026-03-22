@@ -4,6 +4,8 @@
 ; Enter game-over state, clear playfield, and show message.
 GameOver_Trigger:
     call Video_ClearBitmap
+    call HUD_DrawLabels
+    call HUD_DrawBottomLine
     xor a
     ld (GAME_OVER_FIRE_LATCH), a
     ld a, GAME_OVER_DELAY
@@ -49,6 +51,8 @@ GameOver_FireReleased:
 GameOver_Restart:
     call Video_ClearBitmap
     call Video_SetGreenZone
+    call HUD_DrawLabels
+    call HUD_DrawBottomLine
     call GameState_Init
     call Player_Init
     call Shot_Init
@@ -155,18 +159,24 @@ GameOver_MsgPressFire:
 ; -----------------------------------------------------------------------
 ; Glyph index constants
 ; -----------------------------------------------------------------------
-GLYPH_A:   equ 0
-GLYPH_E:   equ 1
-GLYPH_F:   equ 2
-GLYPH_G:   equ 3
-GLYPH_I:   equ 4
-GLYPH_M:   equ 5
-GLYPH_O:   equ 6
-GLYPH_P:   equ 7
-GLYPH_R:   equ 8
-GLYPH_S:   equ 9
-GLYPH_SPC: equ 10
-GLYPH_V:   equ 11
+GLYPH_A:    equ 0
+GLYPH_E:    equ 1
+GLYPH_F:    equ 2
+GLYPH_G:    equ 3
+GLYPH_I:    equ 4
+GLYPH_M:    equ 5
+GLYPH_O:    equ 6
+GLYPH_P:    equ 7
+GLYPH_R:    equ 8
+GLYPH_S:    equ 9
+GLYPH_SPC:  equ 10
+GLYPH_V:    equ 11
+GLYPH_C:    equ 12
+GLYPH_H:    equ 13
+GLYPH_DASH: equ 14
+GLYPH_LT:   equ 15
+GLYPH_1:    equ 16
+GLYPH_2:    equ 17
 
 ; -----------------------------------------------------------------------
 ; Glyph bitmap data (12 glyphs × 8 bytes, alphabetical order)
@@ -196,3 +206,15 @@ GameOver_Glyphs:
     db 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     ; V (11)
     db 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00
+    ; C (12)
+    db 0x3C, 0x66, 0x60, 0x60, 0x60, 0x66, 0x3C, 0x00
+    ; H (13)
+    db 0x66, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00
+    ; - dash (14)
+    db 0x00, 0x00, 0x00, 0x7E, 0x00, 0x00, 0x00, 0x00
+    ; < less-than (15)
+    db 0x02, 0x0C, 0x30, 0xC0, 0x30, 0x0C, 0x02, 0x00
+    ; 1 (16)
+    db 0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00
+    ; 2 (17)
+    db 0x3C, 0x66, 0x06, 0x0C, 0x30, 0x60, 0x7E, 0x00

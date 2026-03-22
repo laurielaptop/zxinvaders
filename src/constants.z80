@@ -59,10 +59,11 @@ DEBUG_STATUS_BASE: equ SCREEN_PIXELS + 32
 
 ; HUD layout
 HUD_SCORE_X:            equ 8    ; Score digits: top-left X
-HUD_HI_SCORE_X:         equ 168  ; Hi-score digits: top-right X (168..199, 4 digits)
-HUD_SCORE_Y:            equ 0    ; Score row Y (character row 0, multiple of 8)
+HUD_HI_SCORE_X:         equ 104  ; Hi-score digits: center X (under HI-SCORE label)
+HUD_SCORE2_X:           equ 200  ; P2 score digits: right X (under SCORE<2> label)
+HUD_SCORE_Y:            equ 8    ; Score row Y (character row 1, below label row)
 HUD_LIVES_Y:            equ 184  ; Life icons Y (character row 23, multiple of 8)
-HUD_LIVES_ICON_X:       equ 8    ; First life icon left edge X
+HUD_LIVES_ICON_X:       equ 8    ; First life icon left edge X (digit at X=0, first icon at X=8)
 HUD_LIVES_ICON_SPACING: equ 16   ; Pixels between icon left edges (must be multiple of 8 for byte alignment)
 
 ; HUD scratch and persistent state
@@ -83,7 +84,7 @@ PLAYER_WIDTH: equ 16
 PLAYER_HEIGHT: equ 8
 PLAYER_MIN_X: equ 0
 PLAYER_MAX_X: equ 239      ; Keep one byte margin for shifted three-byte sprite draw
-PLAYER_Y_DEFAULT: equ 176  ; Keep full sprite visible above bottom HUD area
+PLAYER_Y_DEFAULT: equ 168  ; 8px gap above shield bottom (Y=160), matches arcade spacing
 
 ; ===== Projectile Management =====
 MAX_SHOTS: equ 1           ; Player can have 1 shot on screen
