@@ -58,10 +58,16 @@ ALIEN_EDGE_RIGHT: equ 72   ; Right boundary (256 - 176 formation width - 8 margi
 DEBUG_STATUS_BASE: equ SCREEN_PIXELS + 32
 
 ; HUD layout
-HUD_SCORE_X: equ 8
-HUD_SCORE_Y: equ 0
-HUD_LIVES_X: equ 40
-HUD_LIVES_Y: equ 0
+HUD_SCORE_X:            equ 8    ; Score digits: top-left X
+HUD_HI_SCORE_X:         equ 168  ; Hi-score digits: top-right X (168..199, 4 digits)
+HUD_SCORE_Y:            equ 0    ; Score row Y (character row 0, multiple of 8)
+HUD_LIVES_Y:            equ 184  ; Life icons Y (character row 23, multiple of 8)
+HUD_LIVES_ICON_X:       equ 8    ; First life icon left edge X
+HUD_LIVES_ICON_SPACING: equ 20   ; Pixels between icon left edges (16px icon + 4px gap)
+
+; HUD scratch and persistent state
+HUD_SCRATCH:     equ GAME_RAM_BASE + 200  ; 4-byte digit scratch (draw4digits helper)
+STATE_HI_SCORE:  equ GAME_RAM_BASE + 204  ; 2-byte hi-score (persists across restarts)
 
 ; ===== Global Game State =====
 STATE_SCORE: equ GAME_RAM_BASE + 160

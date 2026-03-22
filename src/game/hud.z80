@@ -1,105 +1,267 @@
 ; HUD module
-; Draws score and initializes global game state values.
+; Draws score, hi-score, and life icons each frame.
 
+; -----------------------------------------------------------------------
+; GameState_Init — reset per-game state (NOT hi-score; that persists)
+; -----------------------------------------------------------------------
 GameState_Init:
-    ; Initialize gameplay state bytes
     xor a
     ld (STATE_SCORE), a
     ld (STATE_SCORE + 1), a
     ld (STATE_SCORE + 2), a
     ld (TIMING_FRAME_PHASE), a
-    ld (WAVE_NUMBER), a         ; Reset wave to 0 (wave 1 is index 0)
-    ld (WAVE_CLEAR_TIMER), a    ; No pre-wave pause pending
+    ld (WAVE_NUMBER), a
+    ld (WAVE_CLEAR_TIMER), a
     ld a, PLAYER_LIVES_START
     ld (STATE_LIVES), a
     ld a, GAME_MODE_PLAYING
     ld (STATE_GAME_MODE), a
     ret
 
+; -----------------------------------------------------------------------
+; HUD_Init — called ONCE at program start; zeroes hi-score only
+; -----------------------------------------------------------------------
+HUD_Init:
+    xor a
+    ld (STATE_HI_SCORE), a
+    ld (STATE_HI_SCORE + 1), a
+    ret
+
+; -----------------------------------------------------------------------
+; HUD_Draw — called every game frame
+; -----------------------------------------------------------------------
 HUD_Draw:
-    ; Draw score as three decimal digits (000-255)
-    ld a, (STATE_SCORE)
-    ld d, 0                      ; Hundreds
-HUD_HundredsLoop:
-    cp 100
-    jr c, HUD_HundredsDone
-    sub 100
-    inc d
-    jr HUD_HundredsLoop
-HUD_HundredsDone:
+    ; --- Update hi-score if current score beats it ---
+    ld hl, (STATE_SCORE)
+    ld de, (STATE_HI_SCORE)
+    ld a, h
+    cp d
+    jr c, .no_hi_update         ; score MSB < hi MSB
+    jr nz, .new_hi              ; score MSB > hi MSB
+    ld a, l
+    cp e
+    jr c, .no_hi_update         ; score LSB < hi LSB
+    jr z, .no_hi_update         ; exactly equal
+.new_hi:
+    ld (STATE_HI_SCORE), hl
+.no_hi_update:
 
-    ld e, 0                      ; Tens
-HUD_TensLoop:
-    cp 10
-    jr c, HUD_TensDone
-    sub 10
-    inc e
-    jr HUD_TensLoop
-HUD_TensDone:
-    ld l, a                      ; Ones in L
-
-    ; Draw hundreds digit
-    ld a, d
+    ; --- Draw current score (4 digits, top-left) ---
+    ld hl, (STATE_SCORE)
     ld b, HUD_SCORE_X
     ld c, HUD_SCORE_Y
-    call HUD_DrawDigit
+    call HUD_Draw4Digits
 
-    ; Draw tens digit
-    ld a, e
-    ld b, HUD_SCORE_X + 8
+    ; --- Draw hi-score (4 digits, top-right) ---
+    ld hl, (STATE_HI_SCORE)
+    ld b, HUD_HI_SCORE_X
     ld c, HUD_SCORE_Y
-    call HUD_DrawDigit
+    call HUD_Draw4Digits
 
-    ; Draw ones digit
-    ld a, l
-    ld b, HUD_SCORE_X + 16
-    ld c, HUD_SCORE_Y
-    call HUD_DrawDigit
-
-    ; Draw lives as a single digit (0-9)
-    ld a, (STATE_LIVES)
-    ld b, HUD_LIVES_X
-    ld c, HUD_LIVES_Y
-    call HUD_DrawDigit
+    ; --- Draw life icons (bottom-left) ---
+    call HUD_DrawLives
 
     ret
 
+; -----------------------------------------------------------------------
+; HUD_Draw4Digits
+; Input:  HL = 16-bit value (0–9999), B = X (byte-aligned), C = Y (mult of 8)
+; Clobbers: AF, BC, DE, HL
+; Note: Y must be at a ZX character-row boundary (multiple of 8) because
+;       HUD_DrawDigit uses inc d to advance scanlines within one char row.
+; -----------------------------------------------------------------------
+HUD_Draw4Digits:
+    ; Extract thousands → HUD_SCRATCH+0
+    ld de, 1000
+    ld a, 0
+.thou:
+    and a
+    sbc hl, de
+    jr c, .thou_done
+    inc a
+    jr .thou
+.thou_done:
+    add hl, de
+    ld (HUD_SCRATCH + 0), a
+
+    ; Extract hundreds → HUD_SCRATCH+1
+    ld de, 100
+    ld a, 0
+.hund:
+    and a
+    sbc hl, de
+    jr c, .hund_done
+    inc a
+    jr .hund
+.hund_done:
+    add hl, de
+    ld (HUD_SCRATCH + 1), a
+
+    ; HL < 100 now; extract tens and ones
+    ld a, l
+    ld d, 0
+.tens:
+    cp 10
+    jr c, .tens_done
+    sub 10
+    inc d
+    jr .tens
+.tens_done:
+    ld (HUD_SCRATCH + 3), a     ; ones (A = remainder after tens subtraction)
+    ld a, d
+    ld (HUD_SCRATCH + 2), a     ; tens (D = tens count)
+
+    ; Draw all four digits left-to-right; B=X advances by 8 each digit
+    ld a, (HUD_SCRATCH + 0)
+    call HUD_DrawDigit
+    ld a, b
+    add a, 8
+    ld b, a
+
+    ld a, (HUD_SCRATCH + 1)
+    call HUD_DrawDigit
+    ld a, b
+    add a, 8
+    ld b, a
+
+    ld a, (HUD_SCRATCH + 2)
+    call HUD_DrawDigit
+    ld a, b
+    add a, 8
+    ld b, a
+
+    ld a, (HUD_SCRATCH + 3)
+    call HUD_DrawDigit
+    ret
+
+; -----------------------------------------------------------------------
+; HUD_DrawLives
+; Draws PLAYER_LIVES_START icon slots at HUD_LIVES_Y.
+; Slots with index <= STATE_LIVES show the ship sprite; others are blank.
+; Always redraws all slots so lost lives erase cleanly.
+; -----------------------------------------------------------------------
+HUD_DrawLives:
+    ld d, 1                         ; D = current slot index (1..PLAYER_LIVES_START)
+    ld b, HUD_LIVES_ICON_X          ; B = current X
+    ld c, HUD_LIVES_Y               ; C = Y (fixed)
+.slot_loop:
+    ld a, d
+    cp PLAYER_LIVES_START + 1
+    ret nc                          ; all slots done
+
+    ld a, (STATE_LIVES)
+    cp d                            ; carry set if STATE_LIVES < d
+    jr c, .blank_slot
+
+.draw_ship:
+    push bc
+    push de
+    call HUD_DrawLifeIcon           ; B=X, C=Y
+    pop de
+    pop bc
+    jr .next_slot
+
+.blank_slot:
+    push bc
+    push de
+    call HUD_EraseLifeIcon          ; B=X, C=Y
+    pop de
+    pop bc
+
+.next_slot:
+    ld a, b
+    add a, HUD_LIVES_ICON_SPACING
+    ld b, a
+    inc d
+    jr .slot_loop
+
+; -----------------------------------------------------------------------
+; HUD_DrawLifeIcon
+; Draws a 16×8 player ship sprite (PLAYER_SHIP_CW) at byte-aligned (B, C).
+; B must be a multiple of 8; C must be a multiple of 8.
+; -----------------------------------------------------------------------
+HUD_DrawLifeIcon:
+    ld a, b
+    call Video_CalcAddress          ; HL = screen address for (B, C)
+    ld d, h
+    ld e, l                         ; DE = screen address
+    ld hl, PLAYER_SHIP_CW
+    ld b, PLAYER_HEIGHT             ; 8 rows
+.row:
+    ld a, (hl)
+    ld (de), a                      ; write byte 0 of this row
+    inc hl
+    inc e                           ; advance to next screen byte (same scanline)
+    ld a, (hl)
+    ld (de), a                      ; write byte 1 of this row
+    inc hl
+    dec e                           ; back to column 0
+    inc d                           ; next scanline
+    djnz .row
+    ret
+
+; -----------------------------------------------------------------------
+; HUD_EraseLifeIcon
+; Writes zeros over a 16×8 icon slot at byte-aligned (B, C).
+; -----------------------------------------------------------------------
+HUD_EraseLifeIcon:
+    ld a, b
+    call Video_CalcAddress
+    ld d, h
+    ld e, l
+    ld b, PLAYER_HEIGHT
+.erase_row:
+    xor a
+    ld (de), a
+    inc e
+    ld (de), a
+    dec e
+    inc d
+    djnz .erase_row
+    ret
+
+; -----------------------------------------------------------------------
+; HUD_DrawDigit
+; Input:  A = digit (0–9), B = X (byte-aligned), C = Y (mult of 8)
+; Preserves: BC, DE, HL
+; -----------------------------------------------------------------------
 HUD_DrawDigit:
-    ; Input: A=digit 0..9, B=X (byte-aligned), C=Y
     push bc
     push de
     push hl
 
-    ; Compute sprite pointer: HUD_DIGITS + digit*8
+    ; Sprite pointer: HUD_DIGITS + digit * 8
     ld h, 0
     ld l, a
-    add hl, hl                   ; x2
-    add hl, hl                   ; x4
-    add hl, hl                   ; x8
+    add hl, hl
+    add hl, hl
+    add hl, hl                      ; HL = digit * 8
     ld de, HUD_DIGITS
-    add hl, de                   ; HL = sprite ptr (HUD_DIGITS + digit*8)
+    add hl, de                      ; HL = &HUD_DIGITS[digit*8]
 
-    ; Get screen destination
-    push hl                      ; Save sprite ptr (Video_CalcAddress clobbers HL)
+    push hl                         ; save sprite ptr before Video_CalcAddress clobbers HL
     ld a, b
-    call Video_CalcAddress       ; HL = screen address
+    call Video_CalcAddress          ; HL = screen address (A=X, C=Y)
     ld d, h
-    ld e, l                      ; DE = screen address
-    pop hl                       ; HL = sprite ptr
+    ld e, l                         ; DE = screen address
+    pop hl                          ; HL = sprite ptr
 
     ld b, 8
-HUD_DrawDigitLoop:
+.row_loop:
     ld a, (hl)
     ld (de), a
     inc hl
-    inc d                        ; Next scan line
-    djnz HUD_DrawDigitLoop
+    inc d                           ; next scanline (high byte of ZX screen addr)
+    djnz .row_loop
 
     pop hl
     pop de
     pop bc
     ret
 
+; -----------------------------------------------------------------------
+; Digit bitmaps (0–9), 8 bytes each
+; -----------------------------------------------------------------------
 HUD_DIGITS:
     ; 0
     db 0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00
