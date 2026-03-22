@@ -54,10 +54,11 @@ This checklist consolidates the current parity and stabilization work that is st
   - Files: new `src/game/attract.z80`, `src/main.z80` (game-state machine).
   - Done when: player can see the title screen on launch, select 1 or 2 players, and the game starts correctly.
 
-- [ ] In-game HUD: score, hi-score, lives counter with player graphics.
-  - Scope: current score and hi-score displayed at top of screen every frame; remaining lives shown as player-ship sprites at bottom; values update on kill/death.
-  - Files: `src/game/hud.z80`, `src/main.z80`.
-  - Done when: score increments visibly on alien/saucer kill; lives display matches lives remaining; hi-score updates when beaten.
+- [x] In-game HUD: score, hi-score, lives counter with player graphics (2026-03-22).
+  - 4-digit score (16-bit) at top-left X=8; hi-score at top-right X=168; both Y=0.
+  - `HUD_Draw4Digits`: 16-bit → 4 decimal digits via repeated `sbc hl, de`; uses 4-byte `HUD_SCRATCH` buffer.
+  - `STATE_HI_SCORE` (GAME_RAM_BASE+204) zeroed once by `HUD_Init` at program start; updated each frame when score beats it.
+  - Life icons: `HUD_DrawLifeIcon`/`HUD_EraseLifeIcon` draw `PLAYER_SHIP_CW` (16×8) at Y=184 (green zone, char-row boundary); all slots redrawn each frame so lost lives erase cleanly.
 
 - [x] Colour: green zone for shields and player area (2026-03-22).
   - `Video_SetGreenZone` fills attribute rows 18–23 (Y=144–191) with `ATTR_GREEN` (0x04).
