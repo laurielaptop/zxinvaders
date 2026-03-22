@@ -32,10 +32,8 @@ This checklist consolidates the current parity and stabilization work that is st
   - Primary docs: `docs/enemy-fire-logic.md`, `docs/zrcp-debug.md`.
   - Remaining: further cadence tuning if live-play feel still seems too sparse or too dense.
 
-- [ ] Continue monitoring attribute-memory corruption risk.
-  - Scope: repeated gameplay sessions with write-guard instrumentation where needed.
-  - Primary docs: `docs/porting-notes.md`.
-  - Done when: no random attribute squares across repeated long runs.
+- [x] Attribute-memory corruption — closed (2026-03-22).
+  - No stray coloured squares observed across extended play sessions. Risk considered resolved.
 
 - [x] Complete wave/march parity timing gaps (2026-03-22).
   - March speed ramp: `delay = max(3, ALIEN_COUNT_REMAINING >> 2)` — formation accelerates as aliens die, matching arcade natural cadence.
@@ -49,7 +47,29 @@ This checklist consolidates the current parity and stabilization work that is st
   - Alien-count gate implemented: saucer now suppressed when < 8 aliens remain (was TODO, always allowed).
   - Remaining: ISR-aligned spawn (P2); score glyph visual treatment is functionally correct via HUD digits.
 
-## P2 - End-phase improvements
+## P2 - Presentation and parity improvements
+
+- [ ] Start/attract screen.
+  - Scope: game title, hi-score table, score-per-alien-type table, 1-player / 2-player selection. Credit count not required.
+  - Files: new `src/game/attract.z80`, `src/main.z80` (game-state machine).
+  - Done when: player can see the title screen on launch, select 1 or 2 players, and the game starts correctly.
+
+- [ ] In-game HUD: score, hi-score, lives counter with player graphics.
+  - Scope: current score and hi-score displayed at top of screen every frame; remaining lives shown as player-ship sprites at bottom; values update on kill/death.
+  - Files: `src/game/hud.z80`, `src/main.z80`.
+  - Done when: score increments visibly on alien/saucer kill; lives display matches lives remaining; hi-score updates when beaten.
+
+- [ ] Colour: green zone for shields and player area.
+  - Scope: set attribute bytes to green ink (paper black, ink green = 0x04) at wave start for the bottom ~6 character rows covering shields and player. No per-frame attribute writes needed — set once per wave.
+  - Files: `src/game/shields.z80` or `src/main.z80` (wave-start hook).
+  - Done when: player ship and shields render in green; alien area remains white; no colour bleed into attribute rows above the shield line.
+
+- [ ] Game Over screen.
+  - Scope: when the player exhausts all lives, show a "GAME OVER" message and return to the attract/start screen after a short delay.
+  - Files: `src/main.z80`, possibly a new `src/game/gameover.z80`.
+  - Done when: dying on the last life shows the Game Over message and the game loops back to the start screen.
+
+## P3 - End-phase improvements
 
 - [ ] Move from busy-wait pacing to ISR/vblank-synchronized timing.
   - Primary docs: `docs/porting-notes.md`, `docs/alien-march-logic.md`.
