@@ -23,7 +23,7 @@ EnemyShot_InitLoop:
 
     ; Initialize parity scaffolding state.
     ld (ENEMY_SHOT_SYNC_PHASE), a
-    ld a, 0x30
+    ld a, 0x18
     ld (ENEMY_SHOT_RELOAD_RATE), a
 
     xor a
@@ -152,7 +152,7 @@ EnemyShot_CalcReloadRate:
     ld a, 0x07
     ret
 .rate30:
-    ld a, 0x30
+    ld a, 0x18
     ret
 .rate10:
     ld a, 0x10
