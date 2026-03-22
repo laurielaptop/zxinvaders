@@ -94,29 +94,15 @@ Six issues identified during extended play testing. All documented below with ro
     Aliens_DrawSlotDone` skips the zero-write when the slot Y is within or below the shield zone.
   - Files: `src/game/aliens.z80` (`Aliens_DrawDead`).
 
-- [ ] **Alien edge detection ignores dead columns** (issue 6)
-  - Symptom: the formation reverses direction sooner than it should when outer columns have
-    been killed, so live aliens in surviving inner columns never travel as far as they should
-    toward the screen edge.
-  - Current code (`Aliens_Move`, line ~418): checks raw `ALIEN_REF_X` against `ALIEN_EDGE_LEFT`
-    (8) and `ALIEN_EDGE_RIGHT` (72). These constants assume a full 11-column formation.
-  - Original arcade behaviour (from `resources/source.z80:153`, `CursorNextAlien` at 0x0141):
-    aliens are drawn one per frame in sequential order; the edge check fires when the CURRENT
-    alien being drawn hits the screen boundary. This naturally uses the position of the
-    LIVE alien nearest the edge, because dead aliens are skipped in the cursor advance loop
-    (`JP NZ,$0154` skips dead slots). The reversal therefore triggers only when a LIVE alien
-    at the outermost surviving column reaches the boundary.
-  - Fix strategy: before applying the horizontal delta in `Aliens_Move`, scan the grid to find
-    the leftmost and rightmost column that still contains at least one alive alien. Compute
-    actual edge positions: `left_live_x = ALIEN_REF_X + leftmost_live_col × ALIEN_SPACING_X`
-    and `right_live_x = ALIEN_REF_X + rightmost_live_col × ALIEN_SPACING_X + ALIEN_WIDTH`.
-    Compare these against the screen boundaries instead of raw `ALIEN_REF_X`.
-    Edge constants may need recalibrating: ALIEN_EDGE_LEFT should be the pixel left-margin;
-    ALIEN_EDGE_RIGHT should be `256 − ALIEN_WIDTH − right_margin` (right pixel boundary for a
-    single alien, not the full formation).
-  - Files: `src/game/aliens.z80` (`Aliens_Move`, possibly new helper `Aliens_FindLiveBounds`).
-  - Done when: live aliens at the outermost surviving column travel all the way to the
-    screen edge before reversing, matching arcade behaviour as columns are depleted.
+- [x] **Alien edge detection ignores dead columns — fixed (2026-03-22)** (issue 6)
+  - Symptom: formation reversed too early when outer columns were killed.
+  - Root cause: `Aliens_Move` compared raw `ALIEN_REF_X` (col 0 anchor) against fixed constants
+    sized for a full 11-column formation.
+  - Fix: added `Aliens_FindLeftCol` / `Aliens_FindRightCol` helpers that scan the grid to find
+    the outermost column still containing a live alien. Edge check now computes
+    `REF_X + live_col * ALIEN_SPACING_X` and compares against `ALIEN_EDGE_LEFT` (8) and
+    `256 - ALIEN_WIDTH - 8` (232) — the screen-margin boundaries for a single alien.
+  - Files: `src/game/aliens.z80` (`Aliens_Move`, new `Aliens_FindLeftCol`, `Aliens_FindRightCol`).
 
 ## P1 - Parity polish and timing correctness (earlier)
 

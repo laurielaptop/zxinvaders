@@ -414,13 +414,33 @@ Aliens_Move:
     xor 1
     ld (ALIEN_ANIM_FRAME), a
     
-    ; Check for edge collision
+    ; Check for edge collision using actual live-column bounds.
+    ; Avoids premature reversal when outer columns have been killed.
+
+    call Aliens_FindLeftCol      ; B = leftmost live column index
+    ld a, b
+    add a, a
+    add a, a
+    add a, a
+    add a, a                     ; A = left_col * ALIEN_SPACING_X (16)
+    ld c, a
     ld a, (ALIEN_REF_X)
+    add a, c                     ; A = live left edge X
     cp ALIEN_EDGE_LEFT
     jr c, Aliens_HitLeftEdge
-    cp ALIEN_EDGE_RIGHT
+
+    call Aliens_FindRightCol     ; B = rightmost live column index
+    ld a, b
+    add a, a
+    add a, a
+    add a, a
+    add a, a                     ; A = right_col * ALIEN_SPACING_X
+    ld c, a
+    ld a, (ALIEN_REF_X)
+    add a, c                     ; A = live right alien left-edge X
+    cp 256 - ALIEN_WIDTH - 8     ; 232: rightmost valid X with 8px screen margin
     jr nc, Aliens_HitRightEdge
-    
+
     ; Clear vertical movement if it was set
     ld a, (ALIEN_DELTA_Y)
     or a
@@ -456,6 +476,52 @@ Aliens_HasLive:
     djnz .scan_loop
     xor a
     ret
+
+; Aliens_FindLeftCol
+; Returns B = index of the leftmost column containing at least one live alien (0..ALIEN_COLS-1).
+; Only call when at least one alien is alive.
+; Clobbers: A, BC, DE, HL
+Aliens_FindLeftCol:
+    ld b, 0                      ; start from leftmost column
+.lc_col:
+    ld hl, ALIEN_GRID_BASE
+    ld d, 0
+    ld e, b
+    add hl, de                   ; HL = &grid[row 0][col B]
+    ld c, ALIEN_ROWS
+.lc_row:
+    ld a, (hl)
+    or a
+    ret nz                       ; found live alien — B = this column
+    ld de, ALIEN_COLS
+    add hl, de                   ; advance to next row, same column
+    dec c
+    jr nz, .lc_row
+    inc b                        ; no live alien in this col — try next
+    jr .lc_col
+
+; Aliens_FindRightCol
+; Returns B = index of the rightmost column containing at least one live alien (0..ALIEN_COLS-1).
+; Only call when at least one alien is alive.
+; Clobbers: A, BC, DE, HL
+Aliens_FindRightCol:
+    ld b, ALIEN_COLS - 1         ; start from rightmost column
+.rc_col:
+    ld hl, ALIEN_GRID_BASE
+    ld d, 0
+    ld e, b
+    add hl, de                   ; HL = &grid[row 0][col B]
+    ld c, ALIEN_ROWS
+.rc_row:
+    ld a, (hl)
+    or a
+    ret nz                       ; found live alien — B = this column
+    ld de, ALIEN_COLS
+    add hl, de                   ; advance to next row, same column
+    dec c
+    jr nz, .rc_row
+    dec b                        ; no live alien in this col — try previous
+    jr .rc_col
 
 ; Aliens_Reset
 ; Reset alien formation to initial state (for game restart)
