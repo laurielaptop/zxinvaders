@@ -18,7 +18,7 @@ TEST_PIXELS_TAP := $(DIST_DIR)/test_pixels.tap
 DIAG_BIN := $(BUILD_DIR)/zxinvaders_diag.bin
 DIAG_TAP := $(DIST_DIR)/zxinvaders_diag.tap
 
-.PHONY: all assemble package-tap run run-klive run-zesarux clean check check-tools bootstrap dirs
+.PHONY: all assemble package-tap run run-klive run-zesarux monitor clean check check-tools bootstrap dirs
 .PHONY: test-pixels run-test-pixels diag-pixels run-diag-pixels
 
 all: assemble
@@ -41,6 +41,11 @@ run-klive: package-tap
 
 run-zesarux: package-tap
 	@./tools/run_fuse.sh --zesarux $(TAP)
+
+monitor:
+	@echo "Connecting to ZEsarUX ZRCP on localhost:10000 ..."
+	@echo "Make sure ZEsarUX is running (make run-zesarux in another terminal)."
+	@python3 tools/zrcp_monitor.py $(MONITOR_ARGS)
 
 test-pixels: dirs check-assembler $(TEST_PIXELS_BIN)
 	@mkdir -p $(DIST_DIR)

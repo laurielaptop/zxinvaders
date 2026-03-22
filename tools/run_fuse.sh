@@ -54,7 +54,7 @@ if [ -x /Applications/ZEsarUX.app/Contents/MacOS/zesarux ]; then
   echo "In Spectrum BASIC, type exactly:"
   echo "  LOAD \"\""
   echo "(TAP now contains a BASIC loader that runs the CODE block automatically.)"
-  exec /Applications/ZEsarUX.app/Contents/MacOS/zesarux --tape "$TAP_FILE"
+  exec /Applications/ZEsarUX.app/Contents/MacOS/zesarux --enable-remoteprotocol --tape "$TAP_FILE"
 fi
 
 if command -v zesarux >/dev/null 2>&1; then
@@ -62,7 +62,7 @@ if command -v zesarux >/dev/null 2>&1; then
   echo "In Spectrum BASIC, type exactly:"
   echo "  LOAD \"\""
   echo "(TAP now contains a BASIC loader that runs the CODE block automatically.)"
-  exec zesarux --tape "$TAP_FILE"
+  exec zesarux --enable-remoteprotocol --tape "$TAP_FILE"
 fi
 fi
 
