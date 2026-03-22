@@ -6,15 +6,15 @@ GameOver_Trigger:
     call Video_ClearBitmap
     xor a
     ld (GAME_OVER_FIRE_LATCH), a
-    ld a, 180                 ; Auto-restart after a short delay (~3s at ~60 fps)
+    ld a, GAME_OVER_DELAY
     ld (GAME_OVER_TIMER), a
-    call GameOver_DrawMessage
+    call GameOver_DrawScreen
     ret
 
 ; GameOver_Update
-; In game-over mode: wait for fresh fire press or timeout, then restart.
+; In game-over mode: redraw message, wait for fresh fire press or timeout.
 GameOver_Update:
-    call GameOver_DrawMessage
+    call GameOver_DrawScreen
 
     ; Detect fresh fire press (space key bit2 from Input_ReadState).
     call Input_ReadState
@@ -23,7 +23,7 @@ GameOver_Update:
 
     ld a, (GAME_OVER_FIRE_LATCH)
     or a
-    ret nz
+    ret nz                          ; Key already held — wait for release
 
     ld a, 1
     ld (GAME_OVER_FIRE_LATCH), a
@@ -41,7 +41,6 @@ GameOver_FireReleased:
     ret z
     dec (hl)
     ret nz
-
     call GameOver_Restart
     ret
 
@@ -49,6 +48,7 @@ GameOver_FireReleased:
 ; Full restart: reset gameplay systems and return to playing mode.
 GameOver_Restart:
     call Video_ClearBitmap
+    call Video_SetGreenZone
     call GameState_Init
     call Player_Init
     call Shot_Init
@@ -66,77 +66,131 @@ GameOver_Restart:
     ld (STATE_GAME_MODE), a
     ret
 
-; Draws an 8-char "GAME OVER" banner using local 8x8 glyphs.
-GameOver_DrawMessage:
-    ld hl, GameOver_Message
-    ld d, 96                  ; X start
-    ld e, 88                  ; Y start
-    ld b, 8
+; GameOver_DrawScreen
+; Draw the full game-over overlay: "GAME OVER" + "PRESS FIRE".
+GameOver_DrawScreen:
+    ; "GAME OVER" — 9 chars centred at Y=80
+    ld d, 64                        ; X: (256 - 9*8) / 2 = 64 (72px wide + space)
+    ld e, 80
+    ld hl, GameOver_MsgGameOver
+    ld b, 9
+    call GameOver_DrawString
+
+    ; "PRESS FIRE" — 10 chars centred at Y=100
+    ld d, 60                        ; X: (256 - 10*8) / 2 = 60
+    ld e, 100
+    ld hl, GameOver_MsgPressFire
+    ld b, 10
+    call GameOver_DrawString
+    ret
+
+; GameOver_DrawString
+; Draw a string of glyphs.
+; Input: HL = message byte array (glyph indices), D = X, E = Y, B = char count
+GameOver_DrawString:
 .char_loop:
     push bc
+    push de
     push hl
     ld a, (hl)
-    call GameOver_DrawGlyph
+    call GameOver_DrawGlyph         ; A=index, D=X, E=Y
     pop hl
     inc hl
+    pop de
     ld a, d
     add a, 8
-    ld d, a
+    ld d, a                         ; advance X by one char
     pop bc
     djnz .char_loop
     ret
 
-; A = glyph index, D = X, E = Y
+; GameOver_DrawGlyph
+; Draw one 8x8 glyph at (D, E).
+; Input:  A = glyph index, D = X, E = Y
+; Clobbers: AF, BC, DE, HL
 GameOver_DrawGlyph:
-    push bc
-    push de
-    push hl
-
+    ; Compute glyph data address: &GameOver_Glyphs + index * 8
     ld h, 0
     ld l, a
     add hl, hl
     add hl, hl
-    add hl, hl                ; index * 8
+    add hl, hl                      ; HL = index * 8
     ld bc, GameOver_Glyphs
-    add hl, bc                ; HL = glyph data
+    add hl, bc                      ; HL = glyph row data
+    push hl                         ; save glyph ptr before Video_CalcAddress clobbers HL
 
-    ld a, d
-    ld c, e
-    call Video_CalcAddress
-    ex de, hl                 ; DE = screen ptr, HL = glyph ptr
+    ld a, d                         ; A = X
+    ld c, e                         ; C = Y
+    call Video_CalcAddress          ; HL = screen address
+    ld d, h
+    ld e, l                         ; DE = screen address
+    pop hl                          ; HL = glyph data ptr (restored)
 
     ld b, 8
 .row_loop:
     ld a, (hl)
     ld (de), a
-    inc hl
-    inc d
+    inc hl                          ; next glyph row byte
+    inc d                           ; next scanline (high byte of ZX screen addr)
     djnz .row_loop
-
-    pop hl
-    pop de
-    pop bc
     ret
 
-; Encoded as glyph indices: G A M E _ O V E R
-GameOver_Message:
-    db 0, 1, 2, 3, 4, 5, 6, 7
+; -----------------------------------------------------------------------
+; String tables (glyph indices)
+; -----------------------------------------------------------------------
 
-; Glyph order: G A M E space O V R
+; "GAME OVER " (9 chars including trailing space for centering)
+GameOver_MsgGameOver:
+    db GLYPH_G, GLYPH_A, GLYPH_M, GLYPH_E, GLYPH_SPC
+    db GLYPH_O, GLYPH_V, GLYPH_E, GLYPH_R
+
+; "PRESS FIRE" (10 chars)
+GameOver_MsgPressFire:
+    db GLYPH_P, GLYPH_R, GLYPH_E, GLYPH_S, GLYPH_S
+    db GLYPH_SPC
+    db GLYPH_F, GLYPH_I, GLYPH_R, GLYPH_E
+
+; -----------------------------------------------------------------------
+; Glyph index constants
+; -----------------------------------------------------------------------
+GLYPH_A:   equ 0
+GLYPH_E:   equ 1
+GLYPH_F:   equ 2
+GLYPH_G:   equ 3
+GLYPH_I:   equ 4
+GLYPH_M:   equ 5
+GLYPH_O:   equ 6
+GLYPH_P:   equ 7
+GLYPH_R:   equ 8
+GLYPH_S:   equ 9
+GLYPH_SPC: equ 10
+GLYPH_V:   equ 11
+
+; -----------------------------------------------------------------------
+; Glyph bitmap data (12 glyphs × 8 bytes, alphabetical order)
+; -----------------------------------------------------------------------
 GameOver_Glyphs:
-    ; G
-    db 0x3C,0x66,0x60,0x6E,0x66,0x66,0x3C,0x00
-    ; A
-    db 0x18,0x3C,0x66,0x66,0x7E,0x66,0x66,0x00
-    ; M
-    db 0x63,0x77,0x7F,0x6B,0x63,0x63,0x63,0x00
-    ; E
-    db 0x7E,0x60,0x60,0x7C,0x60,0x60,0x7E,0x00
-    ; space
-    db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-    ; O
-    db 0x3C,0x66,0x66,0x66,0x66,0x66,0x3C,0x00
-    ; V
-    db 0x66,0x66,0x66,0x66,0x66,0x3C,0x18,0x00
-    ; R
-    db 0x7C,0x66,0x66,0x7C,0x68,0x6C,0x66,0x00
+    ; A (0)
+    db 0x18, 0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x00
+    ; E (1)
+    db 0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x7E, 0x00
+    ; F (2)
+    db 0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x60, 0x00
+    ; G (3)
+    db 0x3C, 0x66, 0x60, 0x6E, 0x66, 0x66, 0x3C, 0x00
+    ; I (4)
+    db 0x3C, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00
+    ; M (5)
+    db 0x63, 0x77, 0x7F, 0x6B, 0x63, 0x63, 0x63, 0x00
+    ; O (6)
+    db 0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00
+    ; P (7)
+    db 0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60, 0x60, 0x00
+    ; R (8)
+    db 0x7C, 0x66, 0x66, 0x7C, 0x68, 0x6C, 0x66, 0x00
+    ; S (9)
+    db 0x3C, 0x66, 0x60, 0x3C, 0x06, 0x66, 0x3C, 0x00
+    ; space (10)
+    db 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    ; V (11)
+    db 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00

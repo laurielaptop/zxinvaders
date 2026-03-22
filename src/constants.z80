@@ -159,6 +159,7 @@ PLAYER_HIT_FLAG: equ GAME_RAM_BASE + 173       ; 1 = hit this frame
 
 ; Game-over state
 GAME_OVER_TIMER: equ GAME_RAM_BASE + 174       ; Countdown timer for game-over screen
+GAME_OVER_DELAY: equ 80                        ; ~5 s at ~16 fps before auto-restart
 ; ===== Alien Explosion =====
 ALIEN_EXPLODING: equ GAME_RAM_BASE + 186         ; 0xFF=no explosion, 0=exploding
 ALIEN_EXPLOSION_DELAY: equ GAME_RAM_BASE + 187   ; Timer (reload=16, arcade authentic)
