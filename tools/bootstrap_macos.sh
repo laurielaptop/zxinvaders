@@ -9,6 +9,14 @@ fi
 echo "Installing z80asm..."
 brew install z80asm
 
+echo "Checking Python 3..."
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "Installing python3..."
+  brew install python3
+else
+  echo "python3 already available: $(command -v python3)"
+fi
+
 echo "Trying to install ZEsarUX emulator (cask)."
 if ! brew install --cask zesarux; then
   echo "Could not install ZEsarUX cask automatically."

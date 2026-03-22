@@ -15,6 +15,14 @@ check_tool() {
 
 check_tool z80asm
 
+# Python 3 is required by tools/zrcp_monitor.py and tools/dev.sh
+if command -v python3 >/dev/null 2>&1; then
+  printf "[ok] python3 -> %s\n" "$(command -v python3)"
+else
+  printf "[missing] python3 (required for make dev / make monitor)\n"
+  missing=1
+fi
+
 if [ -x /Applications/ZEsarUX.app/Contents/MacOS/zesarux ]; then
   printf "[ok] zesarux -> %s\n" "/Applications/ZEsarUX.app/Contents/MacOS/zesarux"
 elif command -v zesarux >/dev/null 2>&1; then
