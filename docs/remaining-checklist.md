@@ -38,7 +38,7 @@ Six issues identified during extended play testing. All documented below with ro
     branch in `Aliens_DoHit`.
   - Files: `src/game/alien_hit.z80` (`AlienHit_OnHit`), `src/game/aliens.z80` (`Aliens_DoHit`).
 
-- [ ] **HUD digit font too heavy — replace with arcade source font** (issue 2)
+- [x] **HUD digit font replaced with arcade ROM font — fixed (2026-03-22)** (issue 2)
   - Symptom: current score digits look visually bolder/thicker than the original arcade.
   - Root cause: `HUD_DIGITS` in `src/game/hud.z80` uses hand-crafted 8×8 bitmaps.
   - Source font location: `resources/source.z80:4483` — Characters table at ROM address 0x1E00.
@@ -58,10 +58,9 @@ Six issues identified during extended play testing. All documented below with ro
     Each byte is one column of the displayed glyph, MSB = top pixel. The same `rot90cw`
     transform used for alien sprites applies here. After rotation, each byte becomes one
     display row, suitable for direct use in `HUD_DrawDigit`.
-  - Fix strategy: apply rot90cw to each 8-byte column vector to produce 8-byte row vectors;
-    replace the `HUD_DIGITS` table. The existing draw path (`HUD_DrawDigit`) is unchanged.
-  - Files: `src/game/hud.z80` (HUD_DIGITS table only).
-  - Done when: score digits visually match the arcade ROM's lighter stroke weight.
+  - Fix: transposed ROM column vectors (MSB=top) to ZX row-major bytes (MSB=left) using
+    `ZX_Row[r] bit(7-c) = (col[c] >> (7-r)) & 1`. Replaced HUD_DIGITS table; draw path unchanged.
+  - Files: `src/game/hud.z80` (HUD_DIGITS table).
 
 - [x] **Alien type order inverted vertically — fixed (2026-03-22)** (issue 3)
   - Symptom: the heaviest/most complex alien sprite appeared at the bottom rows; simplest at top.
