@@ -1,60 +1,44 @@
-# Handoff for New Chat: Shield Erosion Complete — Polish Phase
-
-## Why this handoff exists
-
-The shield system is now functionally correct. This handoff captures the end state of the shield work and the next sensible tasks.
+# Handoff: Presentation Pass in Progress
 
 Primary task tracker: `docs/remaining-checklist.md`.
 
-## Confirmed complete (March 2026)
+## Confirmed complete (2026-03-22, this session)
 
-- Alien graphics visually correct in emulator (ROM-sourced, locked transform).
-- Player sprite parity complete (ROM-sourced, locked transform).
-- Saucer: ROM-derived art, 1-pixel shifted movement, dev-only `H` key hit simulation.
-- Shield architecture redesigned to match arcade: drawn once at init/wave-start, never erased/redrawn.
-- Shield erosion: `Shields_PunchChannel` clears an 8-row vertical channel directly on the ZX screen bitmap per hit.
-- Shield collision: AABB fast-reject + pixel-level screen-byte read; shots pass through fully-eroded columns.
-- Player shots correctly blocked and stopped at shields (HL preservation fix in `shot.z80`).
-- Enemy shots correctly spawn and continue firing after first volley (outer-loop B register fix in `enemy_shot.z80`).
-- Enemy shots blocked by shields; shot passes through when shield column is fully eroded.
+- **Player left-edge clamping** fixed (`cp 0` after `sub 3` was clearing carry; removed it).
+- **Wave transition** fixed (`Video_ClearBitmap` was overwriting attribute area; now clears bitmap only).
+- **March speed ramp**: `delay = max(3, ALIEN_COUNT_REMAINING >> 2)`.
+- **Pre-wave pause**: 30-frame `WAVE_CLEAR_TIMER` countdown before `Aliens_NewWave`.
+- **Enemy-shot cadence**: initial reload-rate guard halved (0x30 → 0x18); eliminates 3–4 s dry spells at score ≤ 200.
+- **Saucer timing parity**: speed 1→2 px/frame (~7 s traversal), init delay 256→400 frames (~25 s interval), alien-count gate (≥8 required to spawn).
+- **Colour — green zone**: `Video_SetGreenZone` sets attribute rows 18–23 (Y=144–191) to green ink on black paper at game start. Covers shields, the gap, and the player row. Persists across waves.
+- **ZRCP remote debugging**: `tools/zrcp_monitor.py`, `make dev`, `make monitor`. Measured loop rate ~16 fps.
+- All timing constants calibrated to ~16 fps measured game-loop rate.
 
-## Current repository state
+## Open — P2 presentation items (next up)
 
-- Latest commit on `main`: see `git log -1`.
-- Working tree clean after this session's commit.
+1. **Game Over screen** — show "GAME OVER" when player exhausts lives; return to attract loop after a short delay. Files: `src/main.z80`.
+2. **In-game HUD** — score + hi-score at top of screen, remaining lives as player-ship sprite icons at bottom. Files: `src/game/hud.z80`, `src/main.z80`.
+3. **Start/attract screen** — title, hi-score table, alien score table, 1P/2P selection (no credit count). Files: new `src/game/attract.z80`, `src/main.z80`.
 
-## Confirmed complete (March 2026, continued)
+## Open — P3 technical
 
-- Enemy shots pass through eroded shield channels: `Shields_CheckCollision` now tests the specific bit at shot_X (not the whole byte), preventing false collisions from adjacent intact pixels in the same screen byte.
-- Erosion channels widened to match arcade shot pattern widths: enemy 5 px (0xF8), player 6 px (0xFC).
-- Player AABB collision confirmed: enemy shots reliably kill the player after passing through/below shields.
-- **March speed ramp**: `delay = max(3, ALIEN_COUNT_REMAINING >> 2)` in `Aliens_Move` — formation accelerates naturally as aliens die, matching the arcade's feel.
-- **Pre-wave pause**: 30-frame countdown (`WAVE_CLEAR_TIMER`) in `MAIN_LOOP_WAVE_CLEAR` before `Aliens_NewWave` is called.
-- **Wave transition fixed**: `Video_ClearBitmap` was clearing 6912 bytes (bitmap + attribute area), zeroing all attributes to 0 (black-on-black) on every wave clear. Fixed to 6144 bytes (bitmap only). Attributes remain white-on-black across wave transitions.
-- Multiple waves now playable end-to-end.
-
-## P1 priorities for next session
-
-1. **Enemy-shot timing/cadence polish** — source-trace validation of fire delay and volley density.
-2. **Saucer timing parity** — busy-wait → ISR-aligned spawn; source-like score glyph.
-3. **Attribute-memory safety sweep** — write-guard instrumentation if corruption recurs.
-
-## P2 (end-phase)
-
-- ISR/vblank-synchronized timing (replace busy-wait pacing).
-- Flicker reduction via render optimization.
-- Audio: shot/fire/hit/march cues.
+- ISR/vblank-synchronized timing (replace busy-wait ~16 fps pacing).
+- Flicker reduction (post-ISR).
+- Audio: shot/fire/hit/march/saucer cues.
 
 ## Important technical facts
 
-1. `make run-zesarux` rebuilds and runs the latest TAP correctly.
-2. `Video_CalcAddress`: input A=X, C=Y; output HL=screen address; preserves B, C, D, E; clobbers A and HL.
-3. Shields are permanent screen content — never call `Shields_Erase` or `Shields_Draw` from the main loop.
-4. `Shields_PunchChannel` signature: `B=shot_X, C=Y_start, D=row_count, E=mask_byte`.
-5. `Shields_CheckCollision` signature: `B=X, C=Y, A=width`; returns A=shield_index or 0xFF.
-6. Z80 constraint: `ld (nn), r` is only valid for A — other registers must go through the accumulator.
-7. Player sprite parity and shield art are locked; do not reopen unless new visual evidence appears.
+1. `make run-zesarux` rebuilds and runs the latest TAP.
+2. `Video_CalcAddress`: input A=X, C=Y; output HL=screen address; preserves B,C,D,E; clobbers A,HL.
+3. `Video_SetGreenZone` sets rows 18–23 green; `Video_ClearBitmap` does NOT touch attributes.
+4. `SCREEN_ATTRS = 0x5800`; attribute for row r, col c = `0x5800 + r*32 + c`.
+5. `ATTR_GREEN = 0x04` (ink green, paper black); `ATTR_WHITE = 0x07` (ink white, paper black).
+6. Shields are permanent screen content — never erase/redraw from the main loop.
+7. `Shields_PunchChannel`: B=shot_X, C=Y_start, D=row_count, E=mask_byte.
+8. `Shields_CheckCollision`: B=X, C=Y, A=width; returns A=shield_index or 0xFF.
+9. Z80: `ld (nn), r` only valid for A — other registers need accumulator.
+10. Game loop runs at ~16 fps (busy-wait). All cadence constants reflect this.
 
 ## Suggested first prompt for the new chat
 
-"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as starting context. Shield erosion, wave transitions, and march speed ramp are complete — multiple waves are playable. Focus next on enemy-shot timing/cadence polish and saucer timing parity."
+"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as starting context. Green colour zone is complete. Next: Game Over screen, then in-game HUD, then start/attract screen."
