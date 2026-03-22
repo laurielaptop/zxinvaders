@@ -1,7 +1,7 @@
 ; attract.z80 - Attract / title screen state
 
-ATTRACT_SPRITE_X:    equ 32   ; X for score-table sprites (byte-aligned)
-ATTRACT_SCORETEXT_X: equ 64   ; X for score-table text (after 24px sprite + 8px gap)
+ATTRACT_SPRITE_X:    equ 88   ; X for score-table sprites; centres 80px block at X=128
+ATTRACT_SCORETEXT_X: equ 120  ; X for score-table text (sprite 24px + 8px gap = 88+32)
 
 ; -----------------------------------------------------------------------
 ; Attract_Trigger

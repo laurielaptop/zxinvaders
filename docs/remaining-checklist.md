@@ -123,13 +123,18 @@ Six issues identified during extended play testing. All documented below with ro
 ## P2 - Presentation and parity improvements
 
 - [x] Start/attract screen — 1-player (2026-03-22).
-  - Scope: title "ZX INVADERS", hi-score display, "PRESS FIRE" prompt; 1-player only.
+  - Scope: title, score-advance table with live sprites, hi-score, "PRESS FIRE".
   - On boot and after every game-over, game enters `GAME_MODE_TITLE` (attract) rather than playing directly.
   - Fire press (space) starts a fresh game; latch prevents false trigger from held key.
-  - New glyphs Z, X, N, D added to `GameOver_Glyphs` table (indices 18–21).
+  - Score-advance table shows saucer (24×8) and three alien types (16×8) with their point values,
+    using the same ROM-derived sprites as the gameplay renderer.
+  - Layout (all Y multiples of 8): title Y=16; score table Y=40–88 centred at X=128;
+    hi-score label Y=104, value Y=120; "PRESS FIRE" Y=136.
+  - New glyphs in `GameOver_Glyphs`: Z(18), X(19), N(20), D(21), 0(22), 3(23), T(24), ?(25).
+  - `Attract_DrawSprite16` / `Attract_DrawSaucer24`: byte-aligned sprite helpers using `inc d` scanline trick.
   - `GameOver_Restart` now calls `Attract_Trigger` instead of re-initing to playing directly.
   - Files: new `src/game/attract.z80`, `src/game/game_over.z80`, `src/main.z80`.
-  - Remaining: score-per-alien-type table, 2-player selection (P3).
+  - Remaining: 2-player selection (P3).
 
 - [x] In-game HUD: score, hi-score, lives counter with player graphics (2026-03-22).
   - 4-digit score (16-bit) at top-left X=8, Y=8; hi-score at center X=104, Y=8; P2 score (0000) at X=200, Y=8.
