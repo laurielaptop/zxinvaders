@@ -344,15 +344,9 @@ Aliens_DoHit:
     ld e, a
     ld d, 0
     
-    ; Call explosion handler (B=X, C=Y, DE=index)
+    ; Call explosion handler (B=X, C=Y, DE=index).
+    ; Always returns Z — explosion is always accepted (interrupts any active one).
     call AlienHit_OnHit
-
-    ; If alien explosion is already active, still consume this shot.
-    jr z, Aliens_HitConsumeShot
-
-    ld hl, SHOT_LIST_BASE + SHOT_ACTIVE
-    ld (hl), 2
-    ret
 
 Aliens_HitConsumeShot:
 

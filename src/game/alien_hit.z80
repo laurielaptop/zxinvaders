@@ -10,15 +10,18 @@ AlienHit_Init:
 AlienHit_OnHit:
     ; Trigger explosion at given position
     ; Input: B = X position, C = Y position, DE = alien index
-    ; Returns: Z on success (explosion started), NZ if ignored
-    
-    ; Check if explosion already in progress
+    ; Returns: always Z (explosion always accepted; interrupts any active explosion)
+
+    ; If an explosion is already running, erase it from screen before restarting.
     ld a, (ALIEN_EXPLODING)
     cp 0xFF
-    jr z, AlienHit_OnHitStart
-    ld a, 1
-    or a                    ; NZ = ignored (already exploding)
-    ret
+    jr z, AlienHit_OnHitStart   ; no active explosion — start fresh
+    push bc
+    push de
+    call AlienHit_Erase         ; clear old explosion pixels immediately
+    pop de
+    pop bc
+    ; fall through to restart explosion at new position
 
 AlienHit_OnHitStart:
     ; Mark the alien dead in the live grid immediately so selection logic

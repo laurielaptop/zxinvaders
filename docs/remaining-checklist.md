@@ -27,21 +27,16 @@ This checklist consolidates the current parity and stabilization work that is st
 
 Six issues identified during extended play testing. All documented below with root-cause analysis.
 
-- [ ] **Alien hit blocked by active explosion** (issue 1)
-  - Symptom: a player shot that kills a second alien while an explosion is already animating is
-    silently discarded. The new alien is not marked dead, no score is awarded, and the shot
-    vanishes without visual feedback.
-  - Root cause: `AlienHit_OnHit` returns NZ without acting when `ALIEN_EXPLODING ≠ 0xFF`.
-    The caller (`Aliens_DoHit`) still deactivates the shot (ACTIVE=2) but skips the score and
-    grid-mark branches, so the hit alien stays "alive" and can be targeted again.
-  - Fix strategy: when `AlienHit_OnHit` is called during an active explosion, accept the hit
-    immediately — mark the new grid slot dead, decrement `ALIEN_COUNT_REMAINING`, award score,
-    then restart the explosion timer and position at the new alien. The new explosion replaces
-    the old one; this matches arcade behaviour where a rapid second kill interrupts the previous
-    explosion sequence.
+- [x] **Alien hit blocked by active explosion — fixed (2026-03-22)** (issue 1)
+  - Symptom: a player shot that killed a second alien while an explosion was animating was
+    silently discarded — no score, no grid mark, hit alien remained "alive".
+  - Root cause: `AlienHit_OnHit` returned NZ without acting when `ALIEN_EXPLODING ≠ 0xFF`;
+    caller (`Aliens_DoHit`) skipped score and shot-consumption on NZ path.
+  - Fix: removed the early-return; when an explosion is already active, `AlienHit_Erase` is
+    called to clear old pixels immediately, then falls through to restart the explosion at the
+    new alien position. `AlienHit_OnHit` now always returns Z. Cleaned up unreachable NZ
+    branch in `Aliens_DoHit`.
   - Files: `src/game/alien_hit.z80` (`AlienHit_OnHit`), `src/game/aliens.z80` (`Aliens_DoHit`).
-  - Done when: killing two aliens in quick succession registers both kills, awards both scores,
-    and shows one clean explosion for each.
 
 - [ ] **HUD digit font too heavy — replace with arcade source font** (issue 2)
   - Symptom: current score digits look visually bolder/thicker than the original arcade.
