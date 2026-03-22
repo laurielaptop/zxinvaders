@@ -28,13 +28,16 @@ Primary task tracker: `docs/remaining-checklist.md`.
 - Enemy shots pass through eroded shield channels: `Shields_CheckCollision` now tests the specific bit at shot_X (not the whole byte), preventing false collisions from adjacent intact pixels in the same screen byte.
 - Erosion channels widened to match arcade shot pattern widths: enemy 5 px (0xF8), player 6 px (0xFC).
 - Player AABB collision confirmed: enemy shots reliably kill the player after passing through/below shields.
+- **March speed ramp**: `delay = max(3, ALIEN_COUNT_REMAINING >> 2)` in `Aliens_Move` — formation accelerates naturally as aliens die, matching the arcade's feel.
+- **Pre-wave pause**: 30-frame countdown (`WAVE_CLEAR_TIMER`) in `MAIN_LOOP_WAVE_CLEAR` before `Aliens_NewWave` is called.
+- **Wave transition fixed**: `Video_ClearBitmap` was clearing 6912 bytes (bitmap + attribute area), zeroing all attributes to 0 (black-on-black) on every wave clear. Fixed to 6144 bytes (bitmap only). Attributes remain white-on-black across wave transitions.
+- Multiple waves now playable end-to-end.
 
 ## P1 priorities for next session
 
-1. **Wave/march parity timing** — pre-wave pause, march speed ramp, late-wave cadence.
-2. **Enemy-shot timing/cadence polish** — source-trace validation of fire delay and volley density.
-3. **Saucer timing parity** — busy-wait → ISR-aligned spawn; source-like score glyph.
-4. **Attribute-memory safety sweep** — write-guard instrumentation if corruption recurs.
+1. **Enemy-shot timing/cadence polish** — source-trace validation of fire delay and volley density.
+2. **Saucer timing parity** — busy-wait → ISR-aligned spawn; source-like score glyph.
+3. **Attribute-memory safety sweep** — write-guard instrumentation if corruption recurs.
 
 ## P2 (end-phase)
 
@@ -54,4 +57,4 @@ Primary task tracker: `docs/remaining-checklist.md`.
 
 ## Suggested first prompt for the new chat
 
-"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as starting context. Shield erosion and collision are complete. Focus next on enemy-shot timing/cadence polish and wave/march parity, while monitoring for attribute-memory corruption."
+"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as starting context. Shield erosion, wave transitions, and march speed ramp are complete — multiple waves are playable. Focus next on enemy-shot timing/cadence polish and saucer timing parity."

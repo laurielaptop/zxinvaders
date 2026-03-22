@@ -371,16 +371,15 @@ Aliens_Move:
     ; Move the alien formation following original ref-alien logic
 
     ; Compute dynamic move delay from live alien count.
-    ; delay = max(1, ALIEN_COUNT_REMAINING >> 3)
-    ; Full rack (55): delay=6.  Half (28): delay=3.  Last few: delay=1.
-    ; Mirrors arcade's natural speed-up: fewer aliens -> fewer scan steps -> faster march.
+    ; delay = max(3, ALIEN_COUNT_REMAINING >> 2)
+    ; Full rack (55): delay=13.  Half (28): delay=7.  Last ~12: delay=3 (min).
+    ; Slows the start of wave 1 and caps the minimum so the last aliens stay beatable.
     ld a, (ALIEN_COUNT_REMAINING)
     srl a
-    srl a
-    srl a                        ; A = count / 8
-    or a
-    jr nz, .delay_ok
-    inc a                        ; Minimum delay of 1
+    srl a                        ; A = count / 4
+    cp 3
+    jr nc, .delay_ok
+    ld a, 3                      ; Minimum delay of 3
 .delay_ok:
     ld b, a                      ; B = dynamic delay threshold
 

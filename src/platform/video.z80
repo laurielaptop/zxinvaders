@@ -11,7 +11,7 @@ Video_Init:
 Video_ClearBitmap:
     ld hl, SCREEN_PIXELS
     ld de, SCREEN_PIXELS + 1
-    ld bc, 6911
+    ld bc, 6143
     ld (hl), 0
     ldir
     ret

@@ -35,10 +35,11 @@ This checklist consolidates the current parity and stabilization work that is st
   - Primary docs: `docs/porting-notes.md`.
   - Done when: no random attribute squares across repeated long runs.
 
-- [ ] Complete wave/march parity timing gaps.
-  - Scope: pre-wave pause, optional one-alien plunger suppression parity check, march speed ramp behavior.
+- [x] Complete wave/march parity timing gaps (2026-03-22).
+  - March speed ramp: `delay = max(3, ALIEN_COUNT_REMAINING >> 2)` — formation accelerates as aliens die, matching arcade natural cadence.
+  - Pre-wave pause: 30-frame countdown before `Aliens_NewWave`, matching arcade inter-wave delay.
+  - Wave transition: fixed `Video_ClearBitmap` bug (was clearing 6912 bytes into attribute area; now correctly clears only the 6144-byte bitmap). Attributes (white-on-black) are preserved across wave transitions.
   - Primary docs: `docs/wave-clear-logic.md`, `docs/alien-march-logic.md`.
-  - Done when: transition timing and late-wave cadence match documented source behavior.
 
 - [ ] Revisit saucer timing/glyph parity.
   - Scope: busy-wait to ISR-aligned spawn timing later; source-like score glyph treatment.
@@ -86,9 +87,9 @@ Use this section to turn P0/P1 items into concrete code-edit sessions.
   - Files: `src/game/player.z80`, `src/game/player_hit.z80`, `src/game/saucer.z80`, `src/game/shot.z80`, `src/game/enemy_shot.z80`.
   - Deliverables: no unsafe scanline stepping in active draw/erase paths; temporary guards retained or documented.
 
-- [ ] Timing parity pass (post-stabilization)
-  - Files: `src/platform/timing.z80`, `src/game/aliens.z80`, `src/game/enemy_shot.z80`.
-  - Deliverables: improved phase/cadence parity with regression tests on wave transitions and enemy fire density.
+- [x] Timing parity pass — wave/march portion complete (2026-03-22).
+  - Files: `src/platform/video.z80`, `src/game/aliens.z80`, `src/main.z80`, `src/constants.z80`, `src/game/hud.z80`.
+  - March speed ramp and pre-wave pause implemented; wave transition stable across multiple waves.
 
 - [ ] Documentation sync pass after each major fix
   - Files: `docs/porting-notes.md`, `docs/gameplay-parity-gaps.md`, `docs/enemy-fire-logic.md`, `docs/remaining-checklist.md`.

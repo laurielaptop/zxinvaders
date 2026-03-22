@@ -56,45 +56,45 @@ MAIN_LOOP_PLAYING:
     call Player_Erase
     call Shot_Erase
     call Aliens_Erase
-        call AlienHit_Erase
+    call AlienHit_Erase
     call PlayerHit_Erase
-    call Saucer_Erase           ; Erase saucer
-    call EnemyShot_Erase        ; Erase enemy shots after saucer cleanup
-    
+    call Saucer_Erase
+    call EnemyShot_Erase
+
     ; Update game state
     call Player_Update
     call Shot_Update
     call EnemyShot_Update
-        call AlienHit_Update
+    call AlienHit_Update
 
-    ; Wave-clear check: if all aliens are dead, advance to next wave.
-    ; Scan the live grid each frame (matches original 8080 CountAliens behavior).
+    ; Wave-clear check before the player-hit / saucer / draw path.
+    ; Jumping here skips those systems, keeping original priority.
     call Aliens_HasLive
     jp z, MAIN_LOOP_WAVE_CLEAR
 
-    call PlayerHit_Update          ; Update player blowup animation
+    call PlayerHit_Update
 
-    ; If PlayerHit_Update switched to game-over, stop this frame here.
+    ; If PlayerHit_Update switched to game-over, stop this frame.
     ld a, (STATE_GAME_MODE)
     cp GAME_MODE_PLAYING
     jr nz, MAIN_LOOP_EARLY_EXIT
 
-    call Saucer_Update             ; Update saucer (timing, movement, hits)
+    call Saucer_Update
     call Debug_UpdateShotActive
     call Debug_UpdatePlayerHit
     call Aliens_Move
     call Aliens_CheckShotCollision
     call EnemyShot_CheckPlayerCollision
     call EnemyShot_TryFire
-    call Debug_ClearShields        ; Clear shields debug indicator
-    
+    call Debug_ClearShields
+
     ; Draw new sprites
     call Aliens_Draw
-        call AlienHit_Draw
+    call AlienHit_Draw
     call Player_Draw
-    call PlayerHit_Draw     ; Draw player blowup animation if active
+    call PlayerHit_Draw
     call Shot_Draw
-    call Saucer_Draw               ; Draw saucer
+    call Saucer_Draw
     call EnemyShot_Draw
     call HUD_Draw
     jp MAIN_LOOP_EARLY_EXIT
@@ -102,6 +102,15 @@ MAIN_LOOP_PLAYING:
 MAIN_LOOP_WAVE_CLEAR:
     ; Pre-wave pause: ~0.5s countdown before advancing to the next wave.
     ; Mirrors arcade 0x09EF delay (0x0A3C). Timer=0 means pause not yet started.
+    ; Draw player/HUD/shots here so the screen stays visible during the pause.
+    ; (Aliens_Draw is omitted — all slots are dead/blank already.)
+    call Player_Draw
+    call PlayerHit_Draw
+    call Shot_Draw
+    call EnemyShot_Draw
+    call Saucer_Draw
+    call HUD_Draw
+
     ld hl, WAVE_CLEAR_TIMER
     ld a, (hl)
     or a
