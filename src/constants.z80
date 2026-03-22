@@ -41,7 +41,7 @@ ALIEN_MOVE_COUNTER: equ GAME_RAM_BASE + 125 ; Frame counter for movement timing
 
 ; Alien initial starting position
 ALIEN_INIT_X: equ 40
-ALIEN_INIT_Y: equ 64      ; DEBUG: lowered from 24 for edge-detection testing
+ALIEN_INIT_Y: equ 24
 ALIEN_SPACING_X: equ 16
 ALIEN_SPACING_Y: equ 12
 ALIEN_WIDTH: equ 16
