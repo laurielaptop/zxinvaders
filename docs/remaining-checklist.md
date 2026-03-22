@@ -64,10 +64,11 @@ This checklist consolidates the current parity and stabilization work that is st
   - Called once from `Video_Init`; persists across waves since `Video_ClearBitmap` does not touch attributes.
   - New constants: `ATTR_WHITE` (0x07), `ATTR_GREEN` (0x04), `ATTR_GREEN_ROW` (18), `ATTR_GREEN_COUNT` (6).
 
-- [ ] Game Over screen.
-  - Scope: when the player exhausts all lives, show a "GAME OVER" message and return to the attract/start screen after a short delay.
-  - Files: `src/main.z80`, possibly a new `src/game/gameover.z80`.
-  - Done when: dying on the last life shows the Game Over message and the game loops back to the start screen.
+- [x] Game Over screen (2026-03-22).
+  - Fixed `GameOver_DrawGlyph` bug: `Video_CalcAddress` was overwriting HL (glyph ptr); nothing rendered.
+  - "GAME OVER" centred at Y=80; "PRESS FIRE" centred at Y=100.
+  - Auto-restart timer tuned to `GAME_OVER_DELAY = 80` (~5 s at 16 fps; was 180 calibrated for 60 fps).
+  - `GameOver_Restart` now calls `Video_SetGreenZone` so green zone survives the bitmap clear.
 
 ## P3 - End-phase improvements
 
