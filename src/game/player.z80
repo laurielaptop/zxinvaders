@@ -50,10 +50,9 @@ Player_Update:
     ; Check left
     bit 0, b
     jr z, Player_CheckRight
-    sub 3                       ; Move left at 3 px/frame
-    cp 0
-    jr nc, Player_StoreX
-    xor a                        ; Clamp to 0
+    sub 3                       ; Move left at 3 px/frame; carry set if underflow
+    jr nc, Player_StoreX        ; No underflow: store result
+    xor a                       ; Underflow: clamp to left edge (0)
     jr Player_StoreX
     
 Player_CheckRight:
