@@ -43,10 +43,11 @@ This checklist consolidates the current parity and stabilization work that is st
   - Wave transition: fixed `Video_ClearBitmap` bug (was clearing 6912 bytes into attribute area; now correctly clears only the 6144-byte bitmap). Attributes (white-on-black) are preserved across wave transitions.
   - Primary docs: `docs/wave-clear-logic.md`, `docs/alien-march-logic.md`.
 
-- [ ] Revisit saucer timing/glyph parity.
-  - Scope: busy-wait to ISR-aligned spawn timing later; source-like score glyph treatment.
-  - Primary docs: `docs/porting-notes.md`, `docs/graphics-animation-parity.md`.
-  - Done when: saucer behavior no longer listed as a parity gap.
+- [x] Saucer timing parity pass (2026-03-22).
+  - Speed doubled (1→2 px/frame): traversal time ~7 s vs prior ~14.5 s at measured 16 fps game-loop rate.
+  - Spawn interval increased (256→400 frames): ~25 s between appearances, matching arcade cadence.
+  - Alien-count gate implemented: saucer now suppressed when < 8 aliens remain (was TODO, always allowed).
+  - Remaining: ISR-aligned spawn (P2); score glyph visual treatment is functionally correct via HUD digits.
 
 ## P2 - End-phase improvements
 
