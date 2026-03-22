@@ -1,0 +1,118 @@
+; attract.z80 - Attract / title screen state
+
+; -----------------------------------------------------------------------
+; Attract_Trigger
+; Enter attract/title screen: clear bitmap, draw title content, set mode.
+; -----------------------------------------------------------------------
+Attract_Trigger:
+    call Video_ClearBitmap
+    call Video_SetGreenZone
+    xor a
+    ld (GAME_OVER_FIRE_LATCH), a    ; reuse game-over latch for fire-edge detection
+    ld a, GAME_MODE_TITLE
+    ld (STATE_GAME_MODE), a
+    call Attract_DrawScreen
+    ret
+
+; -----------------------------------------------------------------------
+; Attract_Update
+; Called each frame in GAME_MODE_TITLE.
+; Waits for a fresh fire (space) press, then starts the game.
+; -----------------------------------------------------------------------
+Attract_Update:
+    call Input_ReadState
+    bit 2, a
+    jr z, .fire_released
+
+    ld a, (GAME_OVER_FIRE_LATCH)
+    or a
+    ret nz                          ; key still held from last frame
+
+    ld a, 1
+    ld (GAME_OVER_FIRE_LATCH), a
+    call Attract_StartGame
+    ret
+
+.fire_released:
+    xor a
+    ld (GAME_OVER_FIRE_LATCH), a
+    ret
+
+; -----------------------------------------------------------------------
+; Attract_StartGame
+; Initialise all gameplay systems and enter playing mode.
+; -----------------------------------------------------------------------
+Attract_StartGame:
+    call Video_ClearBitmap
+    call Video_SetGreenZone
+    call HUD_DrawLabels
+    call HUD_DrawBottomLine
+    call GameState_Init
+    call Player_Init
+    call Shot_Init
+    call EnemyShot_Init
+    call Aliens_Init
+    call Shields_Init
+    call Saucer_Init
+    call PlayerHit_Init
+    call AlienHit_Init
+    xor a
+    ld (GAME_OVER_FIRE_LATCH), a
+    ld a, GAME_MODE_PLAYING
+    ld (STATE_GAME_MODE), a
+    ret
+
+; -----------------------------------------------------------------------
+; Attract_DrawScreen
+; Draws the static title layout once (screen was cleared by caller).
+;
+; Layout (all Y values are multiples of 8):
+;   Y= 48  "ZX INVADERS"  (11 chars, 88px wide) — center X = 84
+;   Y= 88  "HI-SCORE"     ( 8 chars, 64px wide) — center X = 96
+;   Y=104  hi-score value (4 HUD digits,32px wide) — center X = 112
+;   Y=128  "PRESS FIRE"   (10 chars, 80px wide) — center X = 88
+; -----------------------------------------------------------------------
+Attract_DrawScreen:
+    ; "ZX INVADERS" — 11 chars × 8 = 88px, (256-88)/2 = 84
+    ld hl, Attract_MsgTitle
+    ld d, 84
+    ld e, 48
+    ld b, 11
+    call GameOver_DrawString
+
+    ; "HI-SCORE" — 8 chars × 8 = 64px, (256-64)/2 = 96
+    ld hl, Attract_MsgHiScore
+    ld d, 96
+    ld e, 88
+    ld b, 8
+    call GameOver_DrawString
+
+    ; Hi-score value — 4 digits × 8 = 32px, (256-32)/2 = 112
+    ld hl, (STATE_HI_SCORE)
+    ld b, 112
+    ld c, 104
+    call HUD_Draw4Digits
+
+    ; "PRESS FIRE" — 10 chars × 8 = 80px, (256-80)/2 = 88
+    ld hl, Attract_MsgPressFire
+    ld d, 88
+    ld e, 128
+    ld b, 10
+    call GameOver_DrawString
+
+    ret
+
+; -----------------------------------------------------------------------
+; String tables
+; -----------------------------------------------------------------------
+Attract_MsgTitle:
+    db GLYPH_Z, GLYPH_X_LETTER, GLYPH_SPC
+    db GLYPH_I, GLYPH_N, GLYPH_V, GLYPH_A, GLYPH_D, GLYPH_E, GLYPH_R, GLYPH_S
+
+Attract_MsgHiScore:
+    db GLYPH_H, GLYPH_I, GLYPH_DASH, GLYPH_S, GLYPH_C, GLYPH_O, GLYPH_R, GLYPH_E
+
+Attract_MsgPressFire:
+    db GLYPH_P, GLYPH_R, GLYPH_E, GLYPH_S, GLYPH_S
+    db GLYPH_SPC
+    db GLYPH_F, GLYPH_I, GLYPH_R, GLYPH_E

@@ -21,6 +21,7 @@ include "game/shields.z80"
 include "game/player_hit.z80"
 include "game/alien_hit.z80"
 include "game/game_over.z80"
+include "game/attract.z80"
 include "debug.z80"
 
 START:
@@ -29,30 +30,23 @@ START:
 
     call Video_Init
     call HUD_Init               ; zero hi-score once at program start
-    call HUD_DrawLabels         ; static header labels (redrawn after each Video_ClearBitmap)
-    call HUD_DrawBottomLine     ; static defense line at Y=183
-    call GameState_Init
-    call Player_Init
-    call Shot_Init
-    call EnemyShot_Init
-    call Aliens_Init
-    call Shields_Init
-    call Saucer_Init
-    call PlayerHit_Init
-        call AlienHit_Init
     call Debug_Init
+    call Attract_Trigger        ; start on title/attract screen
 
 MAIN_LOOP:
     ld a, (STATE_GAME_MODE)
+    cp GAME_MODE_TITLE
+    jp z, MAIN_LOOP_ATTRACT
+
     cp GAME_MODE_PLAYING
     jr z, MAIN_LOOP_PLAYING
 
     cp GAME_MODE_GAME_OVER
     jp z, MAIN_LOOP_GAME_OVER
 
-    ; Fallback to playing if mode is unknown.
-    ld a, GAME_MODE_PLAYING
-    ld (STATE_GAME_MODE), a
+    ; Fallback: unknown mode — return to attract.
+    call Attract_Trigger
+    jp MAIN_LOOP
 
 MAIN_LOOP_PLAYING:
     ; Erase old sprites
@@ -134,6 +128,11 @@ MAIN_LOOP_EARLY_EXIT:
 
 MAIN_LOOP_GAME_OVER:
     call GameOver_Update
+    call Timing_WaitShort
+    jp MAIN_LOOP
+
+MAIN_LOOP_ATTRACT:
+    call Attract_Update
     call Timing_WaitShort
     jp MAIN_LOOP
 

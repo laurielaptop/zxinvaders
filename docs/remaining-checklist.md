@@ -122,10 +122,14 @@ Six issues identified during extended play testing. All documented below with ro
 
 ## P2 - Presentation and parity improvements
 
-- [ ] Start/attract screen.
-  - Scope: game title, hi-score table, score-per-alien-type table, 1-player / 2-player selection. Credit count not required.
-  - Files: new `src/game/attract.z80`, `src/main.z80` (game-state machine).
-  - Done when: player can see the title screen on launch, select 1 or 2 players, and the game starts correctly.
+- [x] Start/attract screen — 1-player (2026-03-22).
+  - Scope: title "ZX INVADERS", hi-score display, "PRESS FIRE" prompt; 1-player only.
+  - On boot and after every game-over, game enters `GAME_MODE_TITLE` (attract) rather than playing directly.
+  - Fire press (space) starts a fresh game; latch prevents false trigger from held key.
+  - New glyphs Z, X, N, D added to `GameOver_Glyphs` table (indices 18–21).
+  - `GameOver_Restart` now calls `Attract_Trigger` instead of re-initing to playing directly.
+  - Files: new `src/game/attract.z80`, `src/game/game_over.z80`, `src/main.z80`.
+  - Remaining: score-per-alien-type table, 2-player selection (P3).
 
 - [x] In-game HUD: score, hi-score, lives counter with player graphics (2026-03-22).
   - 4-digit score (16-bit) at top-left X=8, Y=8; hi-score at center X=104, Y=8; P2 score (0000) at X=200, Y=8.

@@ -47,27 +47,12 @@ GameOver_FireReleased:
     ret
 
 ; GameOver_Restart
-; Full restart: reset gameplay systems and return to playing mode.
+; Return to attract/title screen after game over.
 GameOver_Restart:
-    call Video_ClearBitmap
-    call Video_SetGreenZone
-    call HUD_DrawLabels
-    call HUD_DrawBottomLine
-    call GameState_Init
-    call Player_Init
-    call Shot_Init
-    call EnemyShot_Init
-    call Aliens_Init
-    call Shields_Init
-    call Saucer_Init
-    call PlayerHit_Init
-    call AlienHit_Init
-
     xor a
     ld (GAME_OVER_FIRE_LATCH), a
     ld (GAME_OVER_TIMER), a
-    ld a, GAME_MODE_PLAYING
-    ld (STATE_GAME_MODE), a
+    call Attract_Trigger
     ret
 
 ; GameOver_DrawScreen
@@ -177,6 +162,10 @@ GLYPH_DASH: equ 14
 GLYPH_LT:   equ 15
 GLYPH_1:    equ 16
 GLYPH_2:    equ 17
+GLYPH_Z:    equ 18
+GLYPH_X_LETTER: equ 19
+GLYPH_N:    equ 20
+GLYPH_D:    equ 21
 
 ; -----------------------------------------------------------------------
 ; Glyph bitmap data (12 glyphs × 8 bytes, alphabetical order)
@@ -218,3 +207,11 @@ GameOver_Glyphs:
     db 0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00
     ; 2 (17)
     db 0x3C, 0x66, 0x06, 0x0C, 0x30, 0x60, 0x7E, 0x00
+    ; Z (18)
+    db 0x7E, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x7E, 0x00
+    ; X (19)
+    db 0x66, 0x66, 0x3C, 0x18, 0x3C, 0x66, 0x66, 0x00
+    ; N (20)
+    db 0x66, 0x76, 0x7E, 0x6E, 0x66, 0x66, 0x66, 0x00
+    ; D (21)
+    db 0x78, 0x6C, 0x66, 0x66, 0x66, 0x6C, 0x78, 0x00
