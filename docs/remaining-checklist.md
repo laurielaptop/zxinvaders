@@ -68,20 +68,12 @@ Six issues identified during extended play testing. All documented below with ro
   - Files: `src/game/hud.z80` (HUD_DIGITS table only).
   - Done when: score digits visually match the arcade ROM's lighter stroke weight.
 
-- [ ] **Alien type order inverted vertically** (issue 3)
-  - Symptom: the heaviest/most complex alien sprite appears at the bottom rows; the simplest
-    sprite appears at the top. The arcade has the opposite arrangement.
-  - Root cause: `Aliens_SelectValidationSprite` in `src/game/aliens.z80` maps
-    `row_index 0–1 → TypeA`, `2–3 → TypeB`, `4 → TypeC` where `row_index = ALIEN_ROWS − D`
-    and D counts from 5 (top) down to 1 (bottom).
-    Result: top 2 rows = TypeA, middle 2 = TypeB, bottom 1 = TypeC.
-    Arcade layout (top→bottom): 1 row TypeC (octopus, 30 pts), 2 rows TypeB (crab, 20 pts),
-    2 rows TypeA (squid, 10 pts). Our mapping is the exact inverse.
-  - Fix strategy: invert the threshold. Change `cp 2 / jr c, TypeA` to select TypeC for the
-    top rows and TypeA for the bottom rows. Specifically, rows 0–0 → TypeC, rows 1–2 → TypeB,
-    rows 3–4 → TypeA.
+- [x] **Alien type order inverted vertically — fixed (2026-03-22)** (issue 3)
+  - Symptom: the heaviest/most complex alien sprite appeared at the bottom rows; simplest at top.
+  - Root cause: thresholds in `Aliens_SelectValidationSprite` were inverted relative to arcade.
+  - Fix: changed `cp 2 / jr c TypeA` to `cp 1 / jr c TypeC` (top row → TypeC), then
+    `cp 3 / jr c TypeB` (next 2 rows → TypeB), fallthrough → TypeA (bottom 2 rows).
   - Files: `src/game/aliens.z80` (`Aliens_SelectValidationSprite`).
-  - Done when: octopus-style sprite is at the top row, squid-style at the two bottom rows.
 
 - [ ] **Enemy shot pixel remnants after movement** (issue 4)
   - Symptom: faint pixel trails or partial shot sprites remain on screen after enemy shots

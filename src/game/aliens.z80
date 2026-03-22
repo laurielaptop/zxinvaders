@@ -181,14 +181,14 @@ Aliens_NextScanline:
 
 Aliens_SelectValidationSprite:
     ; Use ROM-derived alien tables transformed with a fixed pipeline.
-    ; Select alien type by row (like original rack variety).
+    ; Arcade order: TypeC (octopus, 30pts) top 1 row, TypeB (crab, 20pts) mid 2, TypeA (squid, 10pts) bottom 2.
     ld a, ALIEN_ROWS
-    sub d                      ; Row index 0..4
-    cp 2
-    jr c, Aliens_SelectCW_TypeA
-    cp 4
-    jr c, Aliens_SelectCW_TypeB
-    jr Aliens_SelectCW_TypeC
+    sub d                      ; Row index 0..4 (0=top, 4=bottom)
+    cp 1
+    jr c, Aliens_SelectCW_TypeC ; index 0 → TypeC top row
+    cp 3
+    jr c, Aliens_SelectCW_TypeB ; index 1–2 → TypeB middle rows
+    jr Aliens_SelectCW_TypeA    ; index 3–4 → TypeA bottom rows
 
 Aliens_SelectCW_TypeA:
     ld a, (ALIEN_ANIM_FRAME)
