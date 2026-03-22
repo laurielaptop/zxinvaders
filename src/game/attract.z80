@@ -1,5 +1,8 @@
 ; attract.z80 - Attract / title screen state
 
+ATTRACT_SPRITE_X:    equ 32   ; X for score-table sprites (byte-aligned)
+ATTRACT_SCORETEXT_X: equ 64   ; X for score-table text (after 24px sprite + 8px gap)
+
 ; -----------------------------------------------------------------------
 ; Attract_Trigger
 ; Enter attract/title screen: clear bitmap, draw title content, set mode.
@@ -64,42 +67,153 @@ Attract_StartGame:
 
 ; -----------------------------------------------------------------------
 ; Attract_DrawScreen
-; Draws the static title layout once (screen was cleared by caller).
+; Draws the static title layout once (screen cleared by caller).
 ;
-; Layout (all Y values are multiples of 8):
-;   Y= 48  "ZX INVADERS"  (11 chars, 88px wide) — center X = 84
-;   Y= 88  "HI-SCORE"     ( 8 chars, 64px wide) — center X = 96
-;   Y=104  hi-score value (4 HUD digits,32px wide) — center X = 112
-;   Y=128  "PRESS FIRE"   (10 chars, 80px wide) — center X = 88
+; Layout — all Y values are multiples of 8, white zone (Y < 144):
+;   Y= 16  "ZX INVADERS" title, centred
+;   Y= 40  saucer sprite (24px) + "? PTS"    — score-advance table
+;   Y= 56  TypeC sprite  (16px) + "30 PTS"
+;   Y= 72  TypeB sprite  (16px) + "20 PTS"
+;   Y= 88  TypeA sprite  (16px) + "10 PTS"
+;   Y=104  "HI-SCORE" label, centred
+;   Y=120  hi-score 4-digit value, centred
+;   Y=136  "PRESS FIRE", centred
 ; -----------------------------------------------------------------------
 Attract_DrawScreen:
-    ; "ZX INVADERS" — 11 chars × 8 = 88px, (256-88)/2 = 84
+    ; "ZX INVADERS" — 11 chars × 8px = 88px, centre X = (256-88)/2 = 84
     ld hl, Attract_MsgTitle
     ld d, 84
-    ld e, 48
+    ld e, 16
     ld b, 11
     call GameOver_DrawString
 
-    ; "HI-SCORE" — 8 chars × 8 = 64px, (256-64)/2 = 96
+    ; ---- Score advance table ----
+
+    ; Saucer — 24px sprite at (ATTRACT_SPRITE_X, Y=40)
+    ld hl, SaucerSprite
+    ld b, ATTRACT_SPRITE_X
+    ld c, 40
+    call Attract_DrawSaucer24
+    ld hl, Attract_MsgSaucerScore
+    ld d, ATTRACT_SCORETEXT_X
+    ld e, 40
+    ld b, 5
+    call GameOver_DrawString
+
+    ; TypeC (octopus, top row, 30 pts) — 16px sprite at Y=56
+    ld hl, ALIEN_C_CW_F0
+    ld b, ATTRACT_SPRITE_X
+    ld c, 56
+    call Attract_DrawSprite16
+    ld hl, Attract_MsgScore30
+    ld d, ATTRACT_SCORETEXT_X
+    ld e, 56
+    ld b, 6
+    call GameOver_DrawString
+
+    ; TypeB (crab, middle rows, 20 pts) — 16px sprite at Y=72
+    ld hl, ALIEN_B_CW_F0
+    ld b, ATTRACT_SPRITE_X
+    ld c, 72
+    call Attract_DrawSprite16
+    ld hl, Attract_MsgScore20
+    ld d, ATTRACT_SCORETEXT_X
+    ld e, 72
+    ld b, 6
+    call GameOver_DrawString
+
+    ; TypeA (squid, bottom rows, 10 pts) — 16px sprite at Y=88
+    ld hl, ALIEN_A_CW_F0
+    ld b, ATTRACT_SPRITE_X
+    ld c, 88
+    call Attract_DrawSprite16
+    ld hl, Attract_MsgScore10
+    ld d, ATTRACT_SCORETEXT_X
+    ld e, 88
+    ld b, 6
+    call GameOver_DrawString
+
+    ; "HI-SCORE" — 8 chars × 8 = 64px, centre X = (256-64)/2 = 96
     ld hl, Attract_MsgHiScore
     ld d, 96
-    ld e, 88
+    ld e, 104
     ld b, 8
     call GameOver_DrawString
 
-    ; Hi-score value — 4 digits × 8 = 32px, (256-32)/2 = 112
+    ; Hi-score value — 4 digits × 8 = 32px, centre X = (256-32)/2 = 112
     ld hl, (STATE_HI_SCORE)
     ld b, 112
-    ld c, 104
+    ld c, 120
     call HUD_Draw4Digits
 
-    ; "PRESS FIRE" — 10 chars × 8 = 80px, (256-80)/2 = 88
+    ; "PRESS FIRE" — 10 chars × 8 = 80px, centre X = (256-80)/2 = 88
     ld hl, Attract_MsgPressFire
     ld d, 88
-    ld e, 128
+    ld e, 136
     ld b, 10
     call GameOver_DrawString
 
+    ret
+
+; -----------------------------------------------------------------------
+; Attract_DrawSprite16
+; Draw a 16×8 sprite (2 bytes/row, 8 rows) at byte-aligned (B=X, C=Y).
+; Input:  HL = sprite data pointer, B = X (byte-aligned), C = Y (mult of 8)
+; Clobbers: AF, BC, DE, HL
+; Uses inc d scanline trick — Y must be a multiple of 8.
+; -----------------------------------------------------------------------
+Attract_DrawSprite16:
+    push hl                         ; save sprite ptr before Video_CalcAddress clobbers HL
+    ld a, b
+    call Video_CalcAddress          ; HL = screen address
+    ld d, h
+    ld e, l                         ; DE = screen address
+    pop hl                          ; HL = sprite data
+    ld b, ALIEN_HEIGHT              ; 8 rows
+.row16:
+    ld a, (hl)
+    ld (de), a
+    inc hl
+    inc e                           ; advance to next screen byte (same scanline)
+    ld a, (hl)
+    ld (de), a
+    inc hl
+    dec e                           ; back to column 0
+    inc d                           ; next scanline (inc d trick, within char row)
+    djnz .row16
+    ret
+
+; -----------------------------------------------------------------------
+; Attract_DrawSaucer24
+; Draw a 24×8 sprite (3 bytes/row, 8 rows) at byte-aligned (B=X, C=Y).
+; Input:  HL = sprite data pointer, B = X (byte-aligned), C = Y (mult of 8)
+; Clobbers: AF, BC, DE, HL
+; Uses inc d scanline trick — Y must be a multiple of 8.
+; -----------------------------------------------------------------------
+Attract_DrawSaucer24:
+    push hl
+    ld a, b
+    call Video_CalcAddress
+    ld d, h
+    ld e, l
+    pop hl
+    ld b, SAUCER_HEIGHT             ; 8 rows
+.row24:
+    ld a, (hl)
+    ld (de), a
+    inc hl
+    inc e
+    ld a, (hl)
+    ld (de), a
+    inc hl
+    inc e
+    ld a, (hl)
+    ld (de), a
+    inc hl
+    dec e
+    dec e                           ; back to column 0
+    inc d                           ; next scanline
+    djnz .row24
     ret
 
 ; -----------------------------------------------------------------------
@@ -108,6 +222,18 @@ Attract_DrawScreen:
 Attract_MsgTitle:
     db GLYPH_Z, GLYPH_X_LETTER, GLYPH_SPC
     db GLYPH_I, GLYPH_N, GLYPH_V, GLYPH_A, GLYPH_D, GLYPH_E, GLYPH_R, GLYPH_S
+
+Attract_MsgSaucerScore:
+    db GLYPH_QUESTION, GLYPH_SPC, GLYPH_P, GLYPH_T, GLYPH_S
+
+Attract_MsgScore30:
+    db GLYPH_3, GLYPH_0, GLYPH_SPC, GLYPH_P, GLYPH_T, GLYPH_S
+
+Attract_MsgScore20:
+    db GLYPH_2, GLYPH_0, GLYPH_SPC, GLYPH_P, GLYPH_T, GLYPH_S
+
+Attract_MsgScore10:
+    db GLYPH_1, GLYPH_0, GLYPH_SPC, GLYPH_P, GLYPH_T, GLYPH_S
 
 Attract_MsgHiScore:
     db GLYPH_H, GLYPH_I, GLYPH_DASH, GLYPH_S, GLYPH_C, GLYPH_O, GLYPH_R, GLYPH_E
