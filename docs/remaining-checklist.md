@@ -23,7 +23,124 @@ This checklist consolidates the current parity and stabilization work that is st
   - Player AABB collision confirmed working: shots kill the player.
   - Primary docs: `docs/handoff-next-chat.md`, `docs/gameplay-parity-gaps.md`.
 
-## P1 - Parity polish and timing correctness
+## P1 - Live-play bugs (2026-03-22)
+
+Six issues identified during extended play testing. All documented below with root-cause analysis.
+
+- [ ] **Alien hit blocked by active explosion** (issue 1)
+  - Symptom: a player shot that kills a second alien while an explosion is already animating is
+    silently discarded. The new alien is not marked dead, no score is awarded, and the shot
+    vanishes without visual feedback.
+  - Root cause: `AlienHit_OnHit` returns NZ without acting when `ALIEN_EXPLODING ≠ 0xFF`.
+    The caller (`Aliens_DoHit`) still deactivates the shot (ACTIVE=2) but skips the score and
+    grid-mark branches, so the hit alien stays "alive" and can be targeted again.
+  - Fix strategy: when `AlienHit_OnHit` is called during an active explosion, accept the hit
+    immediately — mark the new grid slot dead, decrement `ALIEN_COUNT_REMAINING`, award score,
+    then restart the explosion timer and position at the new alien. The new explosion replaces
+    the old one; this matches arcade behaviour where a rapid second kill interrupts the previous
+    explosion sequence.
+  - Files: `src/game/alien_hit.z80` (`AlienHit_OnHit`), `src/game/aliens.z80` (`Aliens_DoHit`).
+  - Done when: killing two aliens in quick succession registers both kills, awards both scores,
+    and shows one clean explosion for each.
+
+- [ ] **HUD digit font too heavy — replace with arcade source font** (issue 2)
+  - Symptom: current score digits look visually bolder/thicker than the original arcade.
+  - Root cause: `HUD_DIGITS` in `src/game/hud.z80` uses hand-crafted 8×8 bitmaps.
+  - Source font location: `resources/source.z80:4483` — Characters table at ROM address 0x1E00.
+    Score digits occupy character indices 0x1A–0x23 (decimal 26–35), stored as 8 bytes each.
+    Address per digit: `0x1E00 + (0x1A + digit) * 8`.
+    - '0' → 0x1ED0: `00 3E 45 49 51 3E 00 00`
+    - '1' → 0x1ED8: `00 00 21 7F 01 00 00 00`
+    - '2' → 0x1EE0: `00 23 45 49 49 31 00 00`
+    - '3' → 0x1EE8: `00 42 41 49 59 66 00 00`
+    - '4' → 0x1EF0: `00 0C 14 24 7F 04 00 00`
+    - '5' → 0x1EF8: `00 72 51 51 51 4E 00 00`
+    - '6' → 0x1F00: `00 1E 29 49 49 46 00 00`
+    - '7' → 0x1F08: `00 40 47 48 50 60 00 00`
+    - '8' → 0x1F10: `00 36 49 49 49 36 00 00`
+    - '9' → 0x1F18: `00 31 49 49 4A 3C 00 00`
+  - Storage format: bytes are columns in the arcade's 90°-rotated screen coordinate space.
+    Each byte is one column of the displayed glyph, MSB = top pixel. The same `rot90cw`
+    transform used for alien sprites applies here. After rotation, each byte becomes one
+    display row, suitable for direct use in `HUD_DrawDigit`.
+  - Fix strategy: apply rot90cw to each 8-byte column vector to produce 8-byte row vectors;
+    replace the `HUD_DIGITS` table. The existing draw path (`HUD_DrawDigit`) is unchanged.
+  - Files: `src/game/hud.z80` (HUD_DIGITS table only).
+  - Done when: score digits visually match the arcade ROM's lighter stroke weight.
+
+- [ ] **Alien type order inverted vertically** (issue 3)
+  - Symptom: the heaviest/most complex alien sprite appears at the bottom rows; the simplest
+    sprite appears at the top. The arcade has the opposite arrangement.
+  - Root cause: `Aliens_SelectValidationSprite` in `src/game/aliens.z80` maps
+    `row_index 0–1 → TypeA`, `2–3 → TypeB`, `4 → TypeC` where `row_index = ALIEN_ROWS − D`
+    and D counts from 5 (top) down to 1 (bottom).
+    Result: top 2 rows = TypeA, middle 2 = TypeB, bottom 1 = TypeC.
+    Arcade layout (top→bottom): 1 row TypeC (octopus, 30 pts), 2 rows TypeB (crab, 20 pts),
+    2 rows TypeA (squid, 10 pts). Our mapping is the exact inverse.
+  - Fix strategy: invert the threshold. Change `cp 2 / jr c, TypeA` to select TypeC for the
+    top rows and TypeA for the bottom rows. Specifically, rows 0–0 → TypeC, rows 1–2 → TypeB,
+    rows 3–4 → TypeA.
+  - Files: `src/game/aliens.z80` (`Aliens_SelectValidationSprite`).
+  - Done when: octopus-style sprite is at the top row, squid-style at the two bottom rows.
+
+- [ ] **Enemy shot pixel remnants after movement** (issue 4)
+  - Symptom: faint pixel trails or partial shot sprites remain on screen after enemy shots
+    pass through an area.
+  - Root cause: `EnemyShot_EraseSpriteRow` is implemented as `jp EnemyShot_DrawSpriteRow`
+    (line 929) — it uses XOR to "undo" the draw. XOR erasure is only correct if the SAME
+    sprite data is used for both draw and erase. The shot animation frame is selected via
+    `step_counter & 0x03` (`EnemyShot_GetSpriteFramePtrForSlot`), and `step_counter`
+    increments every update cycle. If the counter changes between the Draw and the following
+    Erase, a DIFFERENT frame pattern is XOR'd onto the screen, leaving residual pixels.
+  - Fix strategy: replace XOR erase with a zero-write erase: compute the OR-mask of all
+    possible row bytes for the 3-pixel-wide shot footprint and clear those bits, regardless
+    of animation frame. Alternatively, cache the last-drawn frame index in the shot slot
+    (adds 1 byte per slot) and always erase with the same data that was drawn.
+  - Files: `src/game/enemy_shot.z80` (`EnemyShot_EraseSpriteRow`, `EnemyShot_ErasePixelLoop`).
+  - Done when: no pixel trails remain after shots move or expire.
+
+- [ ] **Shields wiped by descending dead alien slots** (issue 5)
+  - Symptom: shield pixels disappear even when the bottom alien row is entirely dead and no
+    live alien is visible near the shield zone.
+  - Root cause: `Aliens_Draw` iterates all 55 alien slots unconditionally. For dead slots it
+    calls `Aliens_DrawDead`, which writes 16×8 pixels of zeros at the grid position. When
+    the formation descends far enough that the bottom row's Y coordinate overlaps the shield
+    area (shield Y = 144–159), dead slot clears erase shield pixels every frame.
+    Trigger threshold: REF_Y ≥ 96 causes the bottom row (REF_Y + 4 × ALIEN_SPACING_Y = REF_Y + 48)
+    to reach Y = 144.
+  - Fix strategy: in `Aliens_Draw`, skip writing zeros for dead slots whose computed Y falls
+    within the shield zone (Y range 144–(SHIELD_BASE_Y + SHIELD_HEIGHT − 1) = 144–159).
+    Alternatively: only clear a dead slot's position on the frame it DIES (one-shot erase),
+    then leave it alone. The simplest guard: add `ld a, c / cp SHIELD_BASE_Y / jr nc,
+    Aliens_DrawSlotDone` before `Aliens_DrawDead` to suppress shield-zone erasure.
+  - Files: `src/game/aliens.z80` (`Aliens_Draw`, `Aliens_DrawDead` branch).
+  - Done when: shields are not erased by alien descent when the bottom row is empty.
+
+- [ ] **Alien edge detection ignores dead columns** (issue 6)
+  - Symptom: the formation reverses direction sooner than it should when outer columns have
+    been killed, so live aliens in surviving inner columns never travel as far as they should
+    toward the screen edge.
+  - Current code (`Aliens_Move`, line ~418): checks raw `ALIEN_REF_X` against `ALIEN_EDGE_LEFT`
+    (8) and `ALIEN_EDGE_RIGHT` (72). These constants assume a full 11-column formation.
+  - Original arcade behaviour (from `resources/source.z80:153`, `CursorNextAlien` at 0x0141):
+    aliens are drawn one per frame in sequential order; the edge check fires when the CURRENT
+    alien being drawn hits the screen boundary. This naturally uses the position of the
+    LIVE alien nearest the edge, because dead aliens are skipped in the cursor advance loop
+    (`JP NZ,$0154` skips dead slots). The reversal therefore triggers only when a LIVE alien
+    at the outermost surviving column reaches the boundary.
+  - Fix strategy: before applying the horizontal delta in `Aliens_Move`, scan the grid to find
+    the leftmost and rightmost column that still contains at least one alive alien. Compute
+    actual edge positions: `left_live_x = ALIEN_REF_X + leftmost_live_col × ALIEN_SPACING_X`
+    and `right_live_x = ALIEN_REF_X + rightmost_live_col × ALIEN_SPACING_X + ALIEN_WIDTH`.
+    Compare these against the screen boundaries instead of raw `ALIEN_REF_X`.
+    Edge constants may need recalibrating: ALIEN_EDGE_LEFT should be the pixel left-margin;
+    ALIEN_EDGE_RIGHT should be `256 − ALIEN_WIDTH − right_margin` (right pixel boundary for a
+    single alien, not the full formation).
+  - Files: `src/game/aliens.z80` (`Aliens_Move`, possibly new helper `Aliens_FindLiveBounds`).
+  - Done when: live aliens at the outermost surviving column travel all the way to the
+    screen edge before reversing, matching arcade behaviour as columns are depleted.
+
+## P1 - Parity polish and timing correctness (earlier)
 
 - [x] Enemy-shot cadence: initial reload-rate guard halved (2026-03-22).
   - Root cause: `RELOAD_RATE = 0x30` (48 frames) combined with 54-frame per-family rotation caused 3–4 s dry spells at score ≤ 200.

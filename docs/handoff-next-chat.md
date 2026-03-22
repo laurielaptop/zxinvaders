@@ -1,6 +1,37 @@
-# Handoff: Presentation Pass in Progress
+# Handoff: Six Live-Play Bugs Documented, Ready for Fixes
 
-Primary task tracker: `docs/remaining-checklist.md`.
+Primary task tracker: `docs/remaining-checklist.md` — six new P1 items at the top.
+
+## Six live-play bugs documented (2026-03-22)
+
+All root-cause analysis is in the P1 section of `docs/remaining-checklist.md`.
+Short summary for quick orientation:
+
+1. **Alien hit blocked by active explosion** — `AlienHit_OnHit` drops new hits silently when
+   `ALIEN_EXPLODING ≠ 0xFF`. Fix: accept new hit, restart explosion from new position.
+   File: `src/game/alien_hit.z80`.
+
+2. **HUD digit font too heavy** — replace `HUD_DIGITS` table with digits extracted from the
+   arcade ROM font at `source.z80` 0x1ED0–0x1F18; apply `rot90cw` transform (same as alien
+   sprites). File: `src/game/hud.z80`.
+
+3. **Alien type order inverted** — `Aliens_SelectValidationSprite` maps TypeA to top rows,
+   TypeC to bottom. Arcade has TypeC (octopus, 30pts) at top, TypeA (squid, 10pts) at bottom.
+   Invert the threshold. File: `src/game/aliens.z80`.
+
+4. **Enemy shot XOR-erase leaves remnants** — `EnemyShot_EraseSpriteRow` XORs the CURRENT
+   animation frame, which may differ from the drawn frame (step_counter advances each frame).
+   Fix: erase with zero-write rather than XOR. File: `src/game/enemy_shot.z80`.
+
+5. **Shields erased by dead alien slots during descent** — `Aliens_DrawDead` writes zeros for
+   ALL dead slots every frame, including those in the shield Y zone (Y=144–159).
+   Fix: skip dead-slot zeroing when the slot's Y falls within the shield zone.
+   File: `src/game/aliens.z80`.
+
+6. **Edge detection ignores dead outer columns** — `Aliens_Move` checks raw `ALIEN_REF_X`
+   against fixed constants derived from a full formation. When outer columns die, the formation
+   reverses too early. Fix: scan for leftmost/rightmost live column and use actual live-edge X
+   for comparison. File: `src/game/aliens.z80`.
 
 ## Confirmed complete (2026-03-22, this session)
 
@@ -41,4 +72,4 @@ Primary task tracker: `docs/remaining-checklist.md`.
 
 ## Suggested first prompt for the new chat
 
-"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as starting context. Green colour zone is complete. Next: Game Over screen, then in-game HUD, then start/attract screen."
+"Use `docs/handoff-next-chat.md` and `docs/remaining-checklist.md` as starting context. Six live-play bugs are documented in the P1 section of the checklist. Fix them one at a time, starting with issue 3 (alien type order) as it is the smallest change, then issue 1 (explosion blocks hit), issue 4 (shot remnants), issue 5 (shields erased by dead slots), issue 6 (edge detection), and finally issue 2 (font replacement)."
