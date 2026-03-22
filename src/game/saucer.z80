@@ -71,11 +71,11 @@ Saucer_TryActivate:
     ld hl, SAUCER_INIT_DELAY
     ld (SAUCER_TIMER_LSB), hl
     
-    ; Check minimum alien count (need at least 8)
-    ld a, (ALIEN_GRID_BASE + 55)    ; Check alien count indicator
-    ; TODO: Implement proper alien counting
-    ; For now, always allow saucer
-    
+    ; Arcade: saucer only appears when 8 or more aliens remain.
+    ld a, (ALIEN_COUNT_REMAINING)
+    cp SAUCER_MIN_ALIENS            ; Carry set if A < 8
+    ret c                           ; Too few aliens — skip this appearance
+
     ; Activate saucer
     call Saucer_Activate
     ret

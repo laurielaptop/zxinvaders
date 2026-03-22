@@ -183,7 +183,7 @@ SAUCER_SCORE_VALUE: equ GAME_RAM_BASE + 185    ; Score awarded (50/100/150/300)
 SAUCER_DEV_HIT_LATCH: equ GAME_RAM_BASE + 199  ; Dev-only H-key edge latch
 
 ; Saucer timing constants
-SAUCER_INIT_DELAY: equ 256                     ; Tuned for quicker, reliable appearance
+SAUCER_INIT_DELAY: equ 400                     ; ~25 s at ~16 fps game-loop rate
 SAUCER_MIN_ALIENS: equ 8                       ; Minimum aliens before saucer appears
 SAUCER_HIT_DURATION: equ 32                    ; Frames to show explosion/score
 SAUCER_SCORE_DISPLAY_FRAME: equ 24             ; Frame to display score (32-8)
@@ -194,6 +194,6 @@ SAUCER_HEIGHT: equ 8                           ; 8 pixels tall after ZX adaptati
 SAUCER_Y_POS: equ 16                           ; Fixed Y position at top
 
 ; Saucer movement
-SAUCER_SPEED: equ 1                            ; Pixels per frame
+SAUCER_SPEED: equ 2                            ; Pixels per frame (~7 s traversal at 16 fps)
 SAUCER_MIN_X: equ 0                            ; Left boundary
 SAUCER_MAX_X: equ 231                          ; Right boundary for 24px shifted draw
