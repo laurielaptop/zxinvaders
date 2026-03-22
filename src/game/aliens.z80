@@ -128,6 +128,11 @@ Aliens_DrawAliveLoop:
     jr Aliens_DrawSlotDone
 
 Aliens_DrawDead:
+    ; Skip zeroing dead slots that overlap the shield zone — writing zeros
+    ; there would erase shield pixels as the formation descends.
+    ld a, c
+    cp SHIELD_BASE_Y
+    jr nc, Aliens_DrawSlotDone  ; slot Y >= shield zone — do not erase
     ld c, ALIEN_HEIGHT
 Aliens_DrawDeadLoop:
     xor a

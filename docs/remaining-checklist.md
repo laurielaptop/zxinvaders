@@ -86,22 +86,13 @@ Six issues identified during extended play testing. All documented below with ro
   - Files: `src/game/enemy_shot.z80` (`EnemyShot_EraseSpriteRow`, `EnemyShot_ErasePixelLoop`).
   - Done when: no pixel trails remain after shots move or expire.
 
-- [ ] **Shields wiped by descending dead alien slots** (issue 5)
-  - Symptom: shield pixels disappear even when the bottom alien row is entirely dead and no
-    live alien is visible near the shield zone.
-  - Root cause: `Aliens_Draw` iterates all 55 alien slots unconditionally. For dead slots it
-    calls `Aliens_DrawDead`, which writes 16×8 pixels of zeros at the grid position. When
-    the formation descends far enough that the bottom row's Y coordinate overlaps the shield
-    area (shield Y = 144–159), dead slot clears erase shield pixels every frame.
-    Trigger threshold: REF_Y ≥ 96 causes the bottom row (REF_Y + 4 × ALIEN_SPACING_Y = REF_Y + 48)
-    to reach Y = 144.
-  - Fix strategy: in `Aliens_Draw`, skip writing zeros for dead slots whose computed Y falls
-    within the shield zone (Y range 144–(SHIELD_BASE_Y + SHIELD_HEIGHT − 1) = 144–159).
-    Alternatively: only clear a dead slot's position on the frame it DIES (one-shot erase),
-    then leave it alone. The simplest guard: add `ld a, c / cp SHIELD_BASE_Y / jr nc,
-    Aliens_DrawSlotDone` before `Aliens_DrawDead` to suppress shield-zone erasure.
-  - Files: `src/game/aliens.z80` (`Aliens_Draw`, `Aliens_DrawDead` branch).
-  - Done when: shields are not erased by alien descent when the bottom row is empty.
+- [x] **Shields wiped by descending dead alien slots — fixed (2026-03-22)** (issue 5)
+  - Symptom: shield pixels were erased by dead alien slots as the formation descended.
+  - Root cause: `Aliens_DrawDead` wrote 16×8 zeros for every dead slot each frame, including
+    those whose Y had descended into the shield zone (Y ≥ 144).
+  - Fix: added Y-zone guard at the top of `Aliens_DrawDead` — `cp SHIELD_BASE_Y / jr nc,
+    Aliens_DrawSlotDone` skips the zero-write when the slot Y is within or below the shield zone.
+  - Files: `src/game/aliens.z80` (`Aliens_DrawDead`).
 
 - [ ] **Alien edge detection ignores dead columns** (issue 6)
   - Symptom: the formation reverses direction sooner than it should when outer columns have
