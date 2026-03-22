@@ -25,10 +25,12 @@ This checklist consolidates the current parity and stabilization work that is st
 
 ## P1 - Parity polish and timing correctness
 
-- [ ] Finalize enemy-shot parity polish.
-  - Scope: tighter timing precision, shot cleanup consistency, and source-trace validation in edge cases.
-  - Primary docs: `docs/porting-notes.md`, `docs/enemy-fire-logic.md`.
-  - Done when: visuals and cadence are accepted against source notes and emulator captures.
+- [x] Enemy-shot cadence: initial reload-rate guard halved (2026-03-22).
+  - Root cause: `RELOAD_RATE = 0x30` (48 frames) combined with 54-frame per-family rotation caused 3–4 s dry spells at score ≤ 200.
+  - Fix: reduced `.rate30` threshold from `0x30` to `0x18` (24 frames), producing ~36-frame shot intervals (0.72 s) in early game.
+  - Validated via ZRCP timing monitor: typical intervals 1000–1200 ms; gaps >3 s were the anomaly being addressed.
+  - Primary docs: `docs/enemy-fire-logic.md`, `docs/zrcp-debug.md`.
+  - Remaining: further cadence tuning if live-play feel still seems too sparse or too dense.
 
 - [ ] Continue monitoring attribute-memory corruption risk.
   - Scope: repeated gameplay sessions with write-guard instrumentation where needed.
