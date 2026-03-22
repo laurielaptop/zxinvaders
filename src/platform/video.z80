@@ -4,6 +4,7 @@
 Video_Init:
     call Video_ClearBitmap
     call Video_ClearAttributes
+    call Video_SetGreenZone
     xor a
     out (254), a
     ret
@@ -20,6 +21,17 @@ Video_ClearAttributes:
     ld hl, SCREEN_ATTRS
     ld de, SCREEN_ATTRS + 1
     ld bc, 767
-    ld (hl), 7
+    ld (hl), ATTR_WHITE
+    ldir
+    ret
+
+Video_SetGreenZone:
+    ; Paint attribute rows ATTR_GREEN_ROW..(ATTR_GREEN_ROW+ATTR_GREEN_COUNT-1)
+    ; with ATTR_GREEN (ink green, paper black).  Called once at game/wave start;
+    ; Video_ClearBitmap does not touch attributes so this persists across waves.
+    ld hl, SCREEN_ATTRS + (ATTR_GREEN_ROW * 32)
+    ld de, SCREEN_ATTRS + (ATTR_GREEN_ROW * 32) + 1
+    ld bc, (ATTR_GREEN_COUNT * 32) - 1
+    ld (hl), ATTR_GREEN
     ldir
     ret

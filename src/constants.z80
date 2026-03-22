@@ -6,6 +6,12 @@ SCREEN_PIXELS: equ 16384   ; 0x4000 - bitmap starts here
 SCREEN_ATTRS:  equ 22528   ; 0x5800 - color attributes start here
 GAME_RAM_BASE: equ 23808   ; 0x5CA0 - game state RAM after screen
 
+; ===== Colour Attribute Values =====
+ATTR_WHITE:       equ 0x07  ; ink white, paper black (alien / default zone)
+ATTR_GREEN:       equ 0x04  ; ink green, paper black (shield + player zone)
+ATTR_GREEN_ROW:   equ 18    ; first attribute row of green zone (Y = 144)
+ATTR_GREEN_COUNT: equ 6     ; rows 18–23 cover shields, gap, and player (Y 144–191)
+
 ; ===== Game Object Structures =====
 OBJ_SIZE: equ 16           ; 16 bytes per game object
 
