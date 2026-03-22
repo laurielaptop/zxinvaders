@@ -71,16 +71,16 @@ GameOver_Restart:
 ; Y values MUST be multiples of 8 — the inc d scanline trick only works
 ; within a single ZX character row (8 scanlines sharing the same low byte).
 GameOver_DrawScreen:
-    ; "GAME OVER" — 9 chars × 8px = 72px wide; centre X = (256-72)/2 = 92
-    ld d, 92
-    ld e, 64                        ; Y=64, character row 8 (multiple of 8) ✓
+    ; Both messages are 10 chars × 8px = 80px wide → centre X = (256-80)/2 = 88.
+    ; Y values must be multiples of 8 (inc d scanline trick, one ZX char row only).
+    ld d, 88
+    ld e, 64                        ; Y=64, character row 8
     ld hl, GameOver_MsgGameOver
-    ld b, 9
+    ld b, 10
     call GameOver_DrawString
 
-    ; "PRESS FIRE" — 10 chars × 8px = 80px wide; centre X = (256-80)/2 = 88
     ld d, 88
-    ld e, 80                        ; Y=80, character row 10 (multiple of 8) ✓
+    ld e, 80                        ; Y=80, character row 10
     ld hl, GameOver_MsgPressFire
     ld b, 10
     call GameOver_DrawString
@@ -141,10 +141,10 @@ GameOver_DrawGlyph:
 ; String tables (glyph indices)
 ; -----------------------------------------------------------------------
 
-; "GAME OVER " (9 chars including trailing space for centering)
+; "GAME OVER " (10 chars — trailing space balances width to match PRESS FIRE)
 GameOver_MsgGameOver:
     db GLYPH_G, GLYPH_A, GLYPH_M, GLYPH_E, GLYPH_SPC
-    db GLYPH_O, GLYPH_V, GLYPH_E, GLYPH_R
+    db GLYPH_O, GLYPH_V, GLYPH_E, GLYPH_R, GLYPH_SPC
 
 ; "PRESS FIRE" (10 chars)
 GameOver_MsgPressFire:
