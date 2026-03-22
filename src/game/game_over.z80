@@ -68,17 +68,19 @@ GameOver_Restart:
 
 ; GameOver_DrawScreen
 ; Draw the full game-over overlay: "GAME OVER" + "PRESS FIRE".
+; Y values MUST be multiples of 8 — the inc d scanline trick only works
+; within a single ZX character row (8 scanlines sharing the same low byte).
 GameOver_DrawScreen:
-    ; "GAME OVER" — 9 chars centred at Y=80
-    ld d, 64                        ; X: (256 - 9*8) / 2 = 64 (72px wide + space)
-    ld e, 80
+    ; "GAME OVER" — 9 chars × 8px = 72px wide; centre X = (256-72)/2 = 92
+    ld d, 92
+    ld e, 64                        ; Y=64, character row 8 (multiple of 8) ✓
     ld hl, GameOver_MsgGameOver
     ld b, 9
     call GameOver_DrawString
 
-    ; "PRESS FIRE" — 10 chars centred at Y=100
-    ld d, 60                        ; X: (256 - 10*8) / 2 = 60
-    ld e, 100
+    ; "PRESS FIRE" — 10 chars × 8px = 80px wide; centre X = (256-80)/2 = 88
+    ld d, 88
+    ld e, 80                        ; Y=80, character row 10 (multiple of 8) ✓
     ld hl, GameOver_MsgPressFire
     ld b, 10
     call GameOver_DrawString
