@@ -925,8 +925,59 @@ EnemyShot_DrawSpriteRowDone:
     ret
 
 EnemyShot_EraseSpriteRow:
-    ; XOR blit is symmetric: erase uses the same operation as draw.
-    jp EnemyShot_DrawSpriteRow
+    ; Clear the 3-pixel-wide shot footprint using AND-complement (zero-write).
+    ; Frame-independent: correct regardless of which animation frame was drawn.
+    ; Input: A = row mask (ignored), B = X, E = sub-byte offset (0..7)
+    push bc
+    push de
+    ld a, b
+    call Video_CalcAddress       ; HL = screen addr; preserves B,C,D,E
+
+    ld a, e
+    or a
+    jr z, .er_aligned            ; E=0: aligned case, mask = 0xE0 in first byte only
+
+    ; Unaligned: compute first-byte mask = 0xE0 >> E, then AND-complement it.
+    ld b, e
+    ld a, 0xE0
+.er_shr:
+    srl a
+    djnz .er_shr                 ; A = 0xE0 >> E
+    cpl                          ; A = AND mask (clears the shot bits)
+    ld b, a
+    ld a, (hl)
+    and b
+    ld (hl), a
+
+    ; Second byte only needed when E > 5 (bits spill into next byte).
+    ld a, e
+    cp 6
+    jr c, .er_done
+
+    ld a, 8
+    sub e                        ; A = 8-E
+    ld b, a
+    ld a, 0xE0
+.er_shl:
+    sla a
+    djnz .er_shl                 ; A = (0xE0 << (8-E)) & 0xFF = overflow mask
+    cpl                          ; A = AND mask for second byte
+    inc l                        ; next screen byte on same scanline
+    ld b, a
+    ld a, (hl)
+    and b
+    ld (hl), a
+    jr .er_done
+
+.er_aligned:
+    ld a, (hl)
+    and 0x1F                     ; NOT(0xE0): clears bits 7,6,5
+    ld (hl), a
+
+.er_done:
+    pop de
+    pop bc
+    ret
 
 EnemyShot_SetSlotExploding:
     ; Input: HL = enemy-shot slot base

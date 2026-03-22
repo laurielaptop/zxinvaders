@@ -70,21 +70,14 @@ Six issues identified during extended play testing. All documented below with ro
     `cp 3 / jr c TypeB` (next 2 rows → TypeB), fallthrough → TypeA (bottom 2 rows).
   - Files: `src/game/aliens.z80` (`Aliens_SelectValidationSprite`).
 
-- [ ] **Enemy shot pixel remnants after movement** (issue 4)
-  - Symptom: faint pixel trails or partial shot sprites remain on screen after enemy shots
-    pass through an area.
-  - Root cause: `EnemyShot_EraseSpriteRow` is implemented as `jp EnemyShot_DrawSpriteRow`
-    (line 929) — it uses XOR to "undo" the draw. XOR erasure is only correct if the SAME
-    sprite data is used for both draw and erase. The shot animation frame is selected via
-    `step_counter & 0x03` (`EnemyShot_GetSpriteFramePtrForSlot`), and `step_counter`
-    increments every update cycle. If the counter changes between the Draw and the following
-    Erase, a DIFFERENT frame pattern is XOR'd onto the screen, leaving residual pixels.
-  - Fix strategy: replace XOR erase with a zero-write erase: compute the OR-mask of all
-    possible row bytes for the 3-pixel-wide shot footprint and clear those bits, regardless
-    of animation frame. Alternatively, cache the last-drawn frame index in the shot slot
-    (adds 1 byte per slot) and always erase with the same data that was drawn.
-  - Files: `src/game/enemy_shot.z80` (`EnemyShot_EraseSpriteRow`, `EnemyShot_ErasePixelLoop`).
-  - Done when: no pixel trails remain after shots move or expire.
+- [x] **Enemy shot pixel remnants after movement — fixed (2026-03-22)** (issue 4)
+  - Symptom: faint pixel trails remained after enemy shots moved or expired.
+  - Root cause: `EnemyShot_EraseSpriteRow` was a `jp EnemyShot_DrawSpriteRow` — XOR erase
+    which is only correct if the exact same sprite data is used for both draw and erase.
+  - Fix: replaced with AND-complement (zero-write) erase. Computes the 3-pixel-wide footprint
+    mask at the given sub-byte offset E (`0xE0 >> E` for byte 0; `(0xE0 << (8-E)) & 0xFF`
+    for byte 1 when E > 5), then ANDs the screen bytes with the complement. Frame-independent.
+  - Files: `src/game/enemy_shot.z80` (`EnemyShot_EraseSpriteRow`).
 
 - [x] **Shields wiped by descending dead alien slots — fixed (2026-03-22)** (issue 5)
   - Symptom: shield pixels were erased by dead alien slots as the formation descended.
